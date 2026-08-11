@@ -189,3 +189,23 @@ func canCacheKey(req model.AccessRequest) string {
 	}
 	return b.String()
 }
+
+// CreateRoleWithConditions sama seperti CreateRole, tapi mendukung
+// pengisian Conditions (ABAC) sekaligus saat pembuatan role.
+func (e *Engine) CreateRoleWithConditions(ctx context.Context, role model.Role) error {
+	if role.Name == "" {
+		return fmt.Errorf("engine: nama role tidak boleh kosong")
+	}
+	return e.store.CreateRole(ctx, role)
+}
+
+// SetAttribute mengatur satu atribut milik subject, dipakai untuk ABAC.
+func (e *Engine) SetAttribute(ctx context.Context, subjectID, key, value string) error {
+	if err := e.store.SetAttribute(ctx, subjectID, key, value); err != nil {
+		return err
+	}
+	if e.cache != nil {
+		e.cache.Clear()
+	}
+	return nil
+}
