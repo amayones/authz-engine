@@ -5,12 +5,14 @@ import (
 	"time"
 
 	"github.com/amayones/authz-engine/internal/store"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func NewRouter(s *Server, st store.APIKeyStore, limiter *RateLimiter) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", s.handleHealth)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	mux.HandleFunc("POST /roles", s.handleCreateRole)
 	mux.HandleFunc("POST /roles/assign", s.handleAssignRole)

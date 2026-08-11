@@ -54,6 +54,10 @@ type APIKeyStore interface {
 	RevokeAPIKey(ctx context.Context, keyHash string) error
 }
 
+type AuditStore interface {
+	RecordAudit(ctx context.Context, entry model.AuditEntry) error
+}
+
 // Store adalah gabungan RoleStore + SubjectStore + AttributeStore.
 // Ini yang dipakai oleh engine.
 type Store interface {
@@ -62,4 +66,5 @@ type Store interface {
 	AttributeStore
 	RelationStore
 	APIKeyStore
+	AuditStore
 }

@@ -342,3 +342,13 @@ func (s *MSSQLStore) RevokeAPIKey(ctx context.Context, keyHash string) error {
 	}
 	return nil
 }
+
+func (s *MSSQLStore) RecordAudit(ctx context.Context, entry model.AuditEntry) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO audit_log (actor, action, target, detail) VALUES (@p1, @p2, @p3, @p4)`,
+		entry.Actor, entry.Action, entry.Target, entry.Detail)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal insert audit log: %w", err)
+	}
+	return nil
+}

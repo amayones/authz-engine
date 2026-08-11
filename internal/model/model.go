@@ -80,3 +80,12 @@ type APIKey struct {
 	RateLimitRPM int
 	IsActive     bool
 }
+
+// AuditEntry merepresentasikan satu catatan perubahan state authorization
+// (bukan keputusan Can/CheckRelation — itu decision log, beda tujuan).
+type AuditEntry struct {
+	Actor  string // client_name pemanggil API, dari API key
+	Action string // "create_role", "assign_role", "revoke_role", "write_relation", "delete_relation", "set_attribute"
+	Target string // deskripsi ringkas objek yang berubah
+	Detail string // JSON opsional untuk konteks tambahan
+}

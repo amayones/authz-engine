@@ -1,11 +1,12 @@
 package api
 
 import (
-	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/amayones/authz-engine/internal/engine"
 	"github.com/amayones/authz-engine/internal/store"
 )
 
@@ -60,7 +61,7 @@ const clientContextKey contextKey = "client"
 func authMiddleware(s store.APIKeyStore, limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/health" {
+			if r.URL.Path == "/health" || r.URL.Path == "/metrics" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -83,12 +84,13 @@ func authMiddleware(s store.APIKeyStore, limiter *RateLimiter) func(http.Handler
 			}
 
 			if !limiter.Allow(hash, apiKey.RateLimitRPM) {
+				rateLimitRejectedTotal.Inc()
 				w.Header().Set("Retry-After", "60")
 				writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), clientContextKey, apiKey.ClientName)
+			ctx := engine.WithActor(r.Context(), apiKey.ClientName)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -110,4 +112,18 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.TimeoutHandler(next, timeout, `{"error":"request timeout"}`)
 	}
+}
+
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(sw, r)
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(sw.status)
+		requestsTotal.WithLabelValues(r.URL.Path, r.Method, status).Inc()
+		requestDuration.WithLabelValues(r.URL.Path, r.Method).Observe(duration)
+	})
 }

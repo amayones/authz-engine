@@ -31,6 +31,7 @@ func (e *Engine) WriteRelation(ctx context.Context, object, relation, subject st
 	if e.cache != nil {
 		e.cache.Clear()
 	}
+	e.recordAudit(ctx, "write_relation", fmt.Sprintf("%s#%s@%s", object, relation, subject), "")
 	return nil
 }
 
@@ -44,6 +45,7 @@ func (e *Engine) DeleteRelation(ctx context.Context, object, relation, subject s
 	if e.cache != nil {
 		e.cache.Clear()
 	}
+	e.recordAudit(ctx, "delete_relation", fmt.Sprintf("%s#%s@%s", object, relation, subject), "")
 	return nil
 }
 
@@ -58,6 +60,7 @@ func (e *Engine) CheckRelation(ctx context.Context, object, relation, subject st
 	key := "rel:" + object + "|" + relation + "|" + subject
 	if e.cache != nil {
 		if val, found := e.cache.Get(key); found {
+			e.logDecision(ctx, "check_relation", subject, relation, object, val, true)
 			return val, nil
 		}
 	}
@@ -70,6 +73,7 @@ func (e *Engine) CheckRelation(ctx context.Context, object, relation, subject st
 	if e.cache != nil {
 		e.cache.Set(key, allowed)
 	}
+	e.logDecision(ctx, "check_relation", subject, relation, object, allowed, false)
 	return allowed, nil
 }
 

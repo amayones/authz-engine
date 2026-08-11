@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -14,6 +15,9 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
 	connString := getEnv("AUTHZ_DB_CONN", "sqlserver://may:may@localhost:1433?database=authzdb")
 	addr := getEnv("AUTHZ_ADDR", ":8080")
 	autoMigrate := getEnv("AUTHZ_AUTO_MIGRATE", "false")
@@ -35,6 +39,10 @@ func main() {
 	e.SetSchema(model.RelationSchema{
 		"viewer": {"editor", "owner"},
 		"editor": {"owner"},
+	})
+	
+	e.SetDecisionHook(func(kind string, allowed, fromCache bool) {
+		api.RecordDecision(kind, allowed, fromCache)
 	})
 
 	limiter := api.NewRateLimiter()

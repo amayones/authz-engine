@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -14,9 +15,10 @@ import (
 )
 
 type Engine struct {
-	store  store.Store
-	schema model.RelationSchema
-	cache  *cache.Cache
+	store        store.Store
+	schema       model.RelationSchema
+	cache        *cache.Cache
+	decisionHook DecisionHook
 }
 
 func New(s store.Store) *Engine {
@@ -41,6 +43,7 @@ func (e *Engine) AssignRole(ctx context.Context, subjectID, roleName string) err
 		return err
 	}
 	e.invalidateSubject(subjectID)
+	e.recordAudit(ctx, "assign_role", subjectID+" -> "+roleName, "")
 	return nil
 }
 
@@ -49,6 +52,7 @@ func (e *Engine) RevokeRole(ctx context.Context, subjectID, roleName string) err
 		return err
 	}
 	e.invalidateSubject(subjectID)
+	e.recordAudit(ctx, "revoke_role", subjectID+" -> "+roleName, "")
 	return nil
 }
 
@@ -81,6 +85,7 @@ func (e *Engine) Can(ctx context.Context, req model.AccessRequest) (bool, error)
 	key := canCacheKey(req)
 	if e.cache != nil {
 		if val, found := e.cache.Get(key); found {
+			e.logDecision(ctx, "can", req.SubjectID, req.Action, req.Object, val, true)
 			return val, nil
 		}
 	}
@@ -93,7 +98,29 @@ func (e *Engine) Can(ctx context.Context, req model.AccessRequest) (bool, error)
 	if e.cache != nil {
 		e.cache.Set(key, allowed)
 	}
+
+	e.logDecision(ctx, "can", req.SubjectID, req.Action, req.Object, allowed, false)
 	return allowed, nil
+}
+
+// logDecision mencatat hasil evaluasi authorization secara terstruktur.
+// Dipisah dari audit log karena volumenya jauh lebih tinggi (tiap
+// request Can/CheckRelation, bukan cuma saat ada perubahan data) —
+// tujuannya untuk debugging & monitoring, bukan jejak kepatuhan.
+func (e *Engine) logDecision(ctx context.Context, kind, subject, action, object string, allowed, fromCache bool) {
+	slog.Info("authorization decision",
+		"kind", kind,
+		"subject", subject,
+		"action", action,
+		"object", object,
+		"allowed", allowed,
+		"cache_hit", fromCache,
+		"actor", actorFromContext(ctx),
+	)
+
+	if e.decisionHook != nil {
+		e.decisionHook(kind, allowed, fromCache)
+	}
 }
 
 func (e *Engine) evaluateCan(ctx context.Context, req model.AccessRequest) (bool, error) {
@@ -196,7 +223,11 @@ func (e *Engine) CreateRoleWithConditions(ctx context.Context, role model.Role) 
 	if role.Name == "" {
 		return fmt.Errorf("engine: nama role tidak boleh kosong")
 	}
-	return e.store.CreateRole(ctx, role)
+	if err := e.store.CreateRole(ctx, role); err != nil {
+		return err
+	}
+	e.recordAudit(ctx, "create_role", role.Name, "")
+	return nil
 }
 
 // SetAttribute mengatur satu atribut milik subject, dipakai untuk ABAC.
@@ -207,5 +238,49 @@ func (e *Engine) SetAttribute(ctx context.Context, subjectID, key, value string)
 	if e.cache != nil {
 		e.cache.Clear()
 	}
+	e.recordAudit(ctx, "set_attribute", subjectID, fmt.Sprintf(`{"key":%q,"value":%q}`, key, value))
 	return nil
+}
+
+type actorContextKey struct{}
+
+// WithActor menyisipkan identitas pemanggil (biasanya client_name dari
+// API key) ke context, dipakai untuk audit log. Kalau tidak diset,
+// audit log mencatat actor sebagai "unknown".
+func WithActor(ctx context.Context, actor string) context.Context {
+	return context.WithValue(ctx, actorContextKey{}, actor)
+}
+
+func actorFromContext(ctx context.Context) string {
+	if actor, ok := ctx.Value(actorContextKey{}).(string); ok && actor != "" {
+		return actor
+	}
+	return "unknown"
+}
+
+// recordAudit mencatat satu perubahan state. Best-effort: kegagalan
+// mencatat audit tidak menggagalkan operasi utama, hanya di-log sebagai
+// warning supaya tidak hilang diam-diam.
+func (e *Engine) recordAudit(ctx context.Context, action, target, detail string) {
+	entry := model.AuditEntry{
+		Actor:  actorFromContext(ctx),
+		Action: action,
+		Target: target,
+		Detail: detail,
+	}
+	if err := e.store.RecordAudit(ctx, entry); err != nil {
+		slog.Warn("gagal mencatat audit log", "action", action, "target", target, "error", err)
+	}
+}
+
+// DecisionHook dipanggil setiap kali Can() atau CheckRelation() selesai
+// evaluasi. Dipakai untuk menyambungkan metrics eksternal (misal
+// Prometheus) tanpa membuat package engine bergantung ke library metrics
+// tertentu.
+type DecisionHook func(kind string, allowed, fromCache bool)
+
+// SetDecisionHook memasang callback metrics. Panggil sekali saat startup,
+// sebelum engine menerima traffic.
+func (e *Engine) SetDecisionHook(hook DecisionHook) {
+	e.decisionHook = hook
 }

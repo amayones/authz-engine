@@ -18,6 +18,14 @@ type MemoryStore struct {
 	subjectAttributes map[string]model.Attributes
 	relationTuples    []model.RelationTuple
 	apiKeys           map[string]model.APIKey
+	auditLog          []model.AuditEntry
+}
+
+func (s *MemoryStore) RecordAudit(_ context.Context, entry model.AuditEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.auditLog = append(s.auditLog, entry)
+	return nil
 }
 
 func New() *MemoryStore {
