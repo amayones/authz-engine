@@ -1,0 +1,211 @@
+// Package mssql berisi implementasi store.Store menggunakan SQL Server
+// sebagai backend persistent.
+package mssql
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+
+	"github.com/amayones/authz-engine/internal/model"
+	"github.com/amayones/authz-engine/internal/store"
+	_ "github.com/microsoft/go-mssqldb"
+)
+
+type MSSQLStore struct {
+	db *sql.DB
+}
+
+// New membuka koneksi ke SQL Server. connString formatnya:
+// "sqlserver://user:password@host:port?database=dbname"
+func New(connString string) (*MSSQLStore, error) {
+	db, err := sql.Open("sqlserver", connString)
+	if err != nil {
+		return nil, fmt.Errorf("mssql: gagal buka koneksi: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("mssql: gagal ping database: %w", err)
+	}
+	return &MSSQLStore{db: db}, nil
+}
+
+func (s *MSSQLStore) Close() error {
+	return s.db.Close()
+}
+
+// --- RoleStore ---
+
+func (s *MSSQLStore) CreateRole(ctx context.Context, role model.Role) error {
+	permJSON, err := json.Marshal(role.Permissions)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal encode permissions: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO roles (name, permissions) VALUES (@p1, @p2)`,
+		role.Name, string(permJSON))
+	if err != nil {
+		return fmt.Errorf("mssql: gagal insert role: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) GetRole(ctx context.Context, name string) (model.Role, error) {
+	var permJSON string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT permissions FROM roles WHERE name = @p1`, name,
+	).Scan(&permJSON)
+
+	if err == sql.ErrNoRows {
+		return model.Role{}, store.ErrNotFound
+	}
+	if err != nil {
+		return model.Role{}, fmt.Errorf("mssql: gagal query role: %w", err)
+	}
+
+	var perms []model.Permission
+	if err := json.Unmarshal([]byte(permJSON), &perms); err != nil {
+		return model.Role{}, fmt.Errorf("mssql: gagal decode permissions: %w", err)
+	}
+	return model.Role{Name: name, Permissions: perms}, nil
+}
+
+func (s *MSSQLStore) UpdateRole(ctx context.Context, role model.Role) error {
+	permJSON, err := json.Marshal(role.Permissions)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal encode permissions: %w", err)
+	}
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE roles SET permissions = @p1 WHERE name = @p2`,
+		string(permJSON), role.Name)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal update role: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *MSSQLStore) DeleteRole(ctx context.Context, name string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM roles WHERE name = @p1`, name)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal delete role: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *MSSQLStore) ListRoles(ctx context.Context) ([]model.Role, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT name, permissions FROM roles`)
+	if err != nil {
+		return nil, fmt.Errorf("mssql: gagal list roles: %w", err)
+	}
+	defer rows.Close()
+
+	var roles []model.Role
+	for rows.Next() {
+		var name, permJSON string
+		if err := rows.Scan(&name, &permJSON); err != nil {
+			return nil, fmt.Errorf("mssql: gagal scan row: %w", err)
+		}
+		var perms []model.Permission
+		if err := json.Unmarshal([]byte(permJSON), &perms); err != nil {
+			return nil, fmt.Errorf("mssql: gagal decode permissions: %w", err)
+		}
+		roles = append(roles, model.Role{Name: name, Permissions: perms})
+	}
+	return roles, nil
+}
+
+// --- SubjectStore ---
+
+func (s *MSSQLStore) AssignRole(ctx context.Context, subjectID, roleName string) error {
+	_, err := s.db.ExecContext(ctx, `
+		IF NOT EXISTS (SELECT 1 FROM subject_roles WHERE subject_id = @p1 AND role_name = @p2)
+		INSERT INTO subject_roles (subject_id, role_name) VALUES (@p1, @p2)`,
+		subjectID, roleName)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal assign role: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) RevokeRole(ctx context.Context, subjectID, roleName string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM subject_roles WHERE subject_id = @p1 AND role_name = @p2`,
+		subjectID, roleName)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal revoke role: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) GetSubjectRoles(ctx context.Context, subjectID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT role_name FROM subject_roles WHERE subject_id = @p1`, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("mssql: gagal query subject roles: %w", err)
+	}
+	defer rows.Close()
+
+	var roles []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("mssql: gagal scan row: %w", err)
+		}
+		roles = append(roles, name)
+	}
+	return roles, nil
+}
+
+// --- AttributeStore ---
+
+func (s *MSSQLStore) SetAttribute(ctx context.Context, subjectID, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `
+		MERGE subject_attributes AS target
+		USING (SELECT @p1 AS subject_id, @p2 AS attr_key, @p3 AS attr_value) AS src
+		ON target.subject_id = src.subject_id AND target.attr_key = src.attr_key
+		WHEN MATCHED THEN UPDATE SET attr_value = src.attr_value
+		WHEN NOT MATCHED THEN INSERT (subject_id, attr_key, attr_value)
+			VALUES (src.subject_id, src.attr_key, src.attr_value);`,
+		subjectID, key, value)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal set attribute: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) GetAttributes(ctx context.Context, subjectID string) (model.Attributes, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT attr_key, attr_value FROM subject_attributes WHERE subject_id = @p1`, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("mssql: gagal query attributes: %w", err)
+	}
+	defer rows.Close()
+
+	attrs := make(model.Attributes)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, fmt.Errorf("mssql: gagal scan row: %w", err)
+		}
+		attrs[k] = v
+	}
+	return attrs, nil
+}
+
+func (s *MSSQLStore) DeleteAttribute(ctx context.Context, subjectID, key string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM subject_attributes WHERE subject_id = @p1 AND attr_key = @p2`,
+		subjectID, key)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal delete attribute: %w", err)
+	}
+	return nil
+}
