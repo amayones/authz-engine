@@ -16,6 +16,7 @@ type MemoryStore struct {
 	roles             map[string]model.Role
 	subjectRoles      map[string]map[string]bool
 	subjectAttributes map[string]model.Attributes
+	relationTuples    []model.RelationTuple
 }
 
 func New() *MemoryStore {
@@ -164,4 +165,44 @@ func (s *MemoryStore) DeleteAttribute(_ context.Context, subjectID, key string) 
 		delete(attrs, key)
 	}
 	return nil
+}
+
+func (s *MemoryStore) WriteTuple(_ context.Context, t model.RelationTuple) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, existing := range s.relationTuples {
+		if existing == t {
+			return nil // idempotent, sudah ada
+		}
+	}
+	s.relationTuples = append(s.relationTuples, t)
+	return nil
+}
+
+func (s *MemoryStore) DeleteTuple(_ context.Context, t model.RelationTuple) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	filtered := s.relationTuples[:0]
+	for _, existing := range s.relationTuples {
+		if existing != t {
+			filtered = append(filtered, existing)
+		}
+	}
+	s.relationTuples = filtered
+	return nil
+}
+
+func (s *MemoryStore) ReadTuples(_ context.Context, object, relation string) ([]model.RelationTuple, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []model.RelationTuple
+	for _, t := range s.relationTuples {
+		if t.Object == object && t.Relation == relation {
+			result = append(result, t)
+		}
+	}
+	return result, nil
 }

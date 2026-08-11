@@ -209,3 +209,46 @@ func (s *MSSQLStore) DeleteAttribute(ctx context.Context, subjectID, key string)
 	}
 	return nil
 }
+
+// --- RelationStore ---
+
+func (s *MSSQLStore) WriteTuple(ctx context.Context, t model.RelationTuple) error {
+	_, err := s.db.ExecContext(ctx, `
+		IF NOT EXISTS (SELECT 1 FROM relation_tuples WHERE object_id = @p1 AND relation = @p2 AND subject = @p3)
+		INSERT INTO relation_tuples (object_id, relation, subject) VALUES (@p1, @p2, @p3)`,
+		t.Object, t.Relation, t.Subject)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal write tuple: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) DeleteTuple(ctx context.Context, t model.RelationTuple) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM relation_tuples WHERE object_id = @p1 AND relation = @p2 AND subject = @p3`,
+		t.Object, t.Relation, t.Subject)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal delete tuple: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) ReadTuples(ctx context.Context, object, relation string) ([]model.RelationTuple, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT object_id, relation, subject FROM relation_tuples WHERE object_id = @p1 AND relation = @p2`,
+		object, relation)
+	if err != nil {
+		return nil, fmt.Errorf("mssql: gagal read tuples: %w", err)
+	}
+	defer rows.Close()
+
+	var tuples []model.RelationTuple
+	for rows.Next() {
+		var t model.RelationTuple
+		if err := rows.Scan(&t.Object, &t.Relation, &t.Subject); err != nil {
+			return nil, fmt.Errorf("mssql: gagal scan row: %w", err)
+		}
+		tuples = append(tuples, t)
+	}
+	return tuples, nil
+}

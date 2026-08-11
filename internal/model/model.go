@@ -45,3 +45,22 @@ type AccessRequest struct {
 func (r AccessRequest) Permission() Permission {
 	return Permission(r.Resource + ":" + r.Action)
 }
+
+// RelationTuple adalah unit dasar ReBAC: pernyataan bahwa `Subject`
+// memiliki `Relation` terhadap `Object`.
+//
+// Format Object dan Subject biasanya "type:id", misal "document:123".
+// Subject bisa juga berupa userset: "group:eng#member" — artinya semua
+// subject yang punya relation "member" pada object "group:eng".
+type RelationTuple struct {
+	Object   string
+	Relation string
+	Subject  string
+}
+
+// RelationSchema mendefinisikan hierarki relasi. Key adalah nama relasi,
+// value adalah daftar relasi lain yang JUGA memenuhi relasi ini.
+//
+// Contoh: RelationSchema{"viewer": {"editor", "owner"}} berarti siapa pun
+// yang punya relasi "editor" atau "owner" otomatis dianggap "viewer" juga.
+type RelationSchema map[string][]string

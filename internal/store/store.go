@@ -35,10 +35,21 @@ type AttributeStore interface {
 	DeleteAttribute(ctx context.Context, subjectID, key string) error
 }
 
+// RelationStore mengelola relation tuple untuk ReBAC.
+type RelationStore interface {
+	WriteTuple(ctx context.Context, t model.RelationTuple) error
+	DeleteTuple(ctx context.Context, t model.RelationTuple) error
+
+	// ReadTuples mengambil semua tuple pada object dengan relation
+	// tertentu — dipakai engine untuk traversal graph.
+	ReadTuples(ctx context.Context, object, relation string) ([]model.RelationTuple, error)
+}
+
 // Store adalah gabungan RoleStore + SubjectStore + AttributeStore.
 // Ini yang dipakai oleh engine.
 type Store interface {
 	RoleStore
 	SubjectStore
 	AttributeStore
+	RelationStore
 }

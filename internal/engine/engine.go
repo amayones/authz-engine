@@ -10,7 +10,8 @@ import (
 )
 
 type Engine struct {
-	store store.Store
+	store  store.Store
+	schema model.RelationSchema
 }
 
 func New(s store.Store) *Engine {
