@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/amayones/authz-engine/internal/engine"
 	"github.com/amayones/authz-engine/internal/model"
@@ -21,7 +22,7 @@ func main() {
 	}
 	defer s.Close()
 
-	e := engine.New(s)
+	e := engine.NewWithCache(s, 15*time.Second)
 
 	// CreateRole akan error kalau role sudah ada dari run sebelumnya —
 	// aman diabaikan untuk demo.

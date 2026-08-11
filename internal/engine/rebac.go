@@ -23,16 +23,28 @@ func (e *Engine) SetSchema(schema model.RelationSchema) {
 // WriteRelation membuat satu relation tuple, misal:
 // WriteRelation(ctx, "document:123", "owner", "user:amayones")
 func (e *Engine) WriteRelation(ctx context.Context, object, relation, subject string) error {
-	return e.store.WriteTuple(ctx, model.RelationTuple{
+	if err := e.store.WriteTuple(ctx, model.RelationTuple{
 		Object: object, Relation: relation, Subject: subject,
-	})
+	}); err != nil {
+		return err
+	}
+	if e.cache != nil {
+		e.cache.Clear()
+	}
+	return nil
 }
 
 // DeleteRelation menghapus satu relation tuple.
 func (e *Engine) DeleteRelation(ctx context.Context, object, relation, subject string) error {
-	return e.store.DeleteTuple(ctx, model.RelationTuple{
+	if err := e.store.DeleteTuple(ctx, model.RelationTuple{
 		Object: object, Relation: relation, Subject: subject,
-	})
+	}); err != nil {
+		return err
+	}
+	if e.cache != nil {
+		e.cache.Clear()
+	}
+	return nil
 }
 
 // CheckRelation menjawab pertanyaan inti ReBAC: apakah `subject` memiliki
@@ -43,8 +55,22 @@ func (e *Engine) DeleteRelation(ctx context.Context, object, relation, subject s
 // (lewat hierarki schema), ATAU member dari grup yang jadi viewer
 // (lewat userset traversal).
 func (e *Engine) CheckRelation(ctx context.Context, object, relation, subject string) (bool, error) {
-	visited := make(map[string]bool)
-	return e.checkRelation(ctx, object, relation, subject, visited)
+	key := "rel:" + object + "|" + relation + "|" + subject
+	if e.cache != nil {
+		if val, found := e.cache.Get(key); found {
+			return val, nil
+		}
+	}
+
+	allowed, err := e.checkRelation(ctx, object, relation, subject, make(map[string]bool))
+	if err != nil {
+		return false, err
+	}
+
+	if e.cache != nil {
+		e.cache.Set(key, allowed)
+	}
+	return allowed, nil
 }
 
 func (e *Engine) checkRelation(ctx context.Context, object, relation, subject string, visited map[string]bool) (bool, error) {

@@ -33,12 +33,19 @@ type Role struct {
 }
 
 // AccessRequest adalah input untuk pertanyaan "apakah subject ini boleh
-// melakukan action pada resource ini?"
+// melakukan action pada resource ini?" Mendukung evaluasi gabungan
+// RBAC + ABAC + ReBAC dalam satu request.
 type AccessRequest struct {
-	SubjectID string
-	Resource  string
-	Action    string
+	SubjectID string    // format "type:id", misal "user:amayones"
+	Resource  string    // nama resource untuk RBAC, misal "invoice"
+	Action    string    // action untuk RBAC, sekaligus nama relation untuk ReBAC
 	Context   Attributes // atribut tambahan untuk evaluasi ABAC
+
+	// Object opsional. Kalau diisi (format "type:id", misal "document:123"),
+	// engine juga akan cek ReBAC: apakah SubjectID punya relasi bernama
+	// `Action` terhadap Object ini. Kosongkan kalau resource tidak
+	// dikelola lewat relationship graph.
+	Object string
 }
 
 // Permission gabungan dari Resource + Action, dipakai untuk pencocokan cepat.
