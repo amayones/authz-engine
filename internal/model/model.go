@@ -36,9 +36,9 @@ type Role struct {
 // melakukan action pada resource ini?" Mendukung evaluasi gabungan
 // RBAC + ABAC + ReBAC dalam satu request.
 type AccessRequest struct {
-	SubjectID string    // format "type:id", misal "user:amayones"
-	Resource  string    // nama resource untuk RBAC, misal "invoice"
-	Action    string    // action untuk RBAC, sekaligus nama relation untuk ReBAC
+	SubjectID string     // format "type:id", misal "user:amayones"
+	Resource  string     // nama resource untuk RBAC, misal "invoice"
+	Action    string     // action untuk RBAC, sekaligus nama relation untuk ReBAC
 	Context   Attributes // atribut tambahan untuk evaluasi ABAC
 
 	// Object opsional. Kalau diisi (format "type:id", misal "document:123"),
@@ -71,3 +71,12 @@ type RelationTuple struct {
 // Contoh: RelationSchema{"viewer": {"editor", "owner"}} berarti siapa pun
 // yang punya relasi "editor" atau "owner" otomatis dianggap "viewer" juga.
 type RelationSchema map[string][]string
+
+// APIKey merepresentasikan satu kredensial client yang boleh memanggil
+// HTTP API. RateLimitRPM adalah batas request per menit untuk key ini.
+type APIKey struct {
+	ID           int
+	ClientName   string
+	RateLimitRPM int
+	IsActive     bool
+}

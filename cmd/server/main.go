@@ -14,12 +14,7 @@ import (
 
 func main() {
 	connString := getEnv("AUTHZ_DB_CONN", "sqlserver://may:may@localhost:1433?database=authzdb")
-	apiKey := getEnv("AUTHZ_API_KEY", "")
 	addr := getEnv("AUTHZ_ADDR", ":8080")
-
-	if apiKey == "" {
-		log.Fatal("AUTHZ_API_KEY wajib diisi, jangan jalankan server tanpa proteksi")
-	}
 
 	st, err := mssql.New(connString)
 	if err != nil {
@@ -28,16 +23,14 @@ func main() {
 	defer st.Close()
 
 	e := engine.NewWithCache(st, 15*time.Second)
-
-	// Schema hierarki relasi didefinisikan sekali di startup.
-	// Sesuaikan dengan kebutuhan aplikasi kamu.
 	e.SetSchema(model.RelationSchema{
 		"viewer": {"editor", "owner"},
 		"editor": {"owner"},
 	})
 
+	limiter := api.NewRateLimiter()
 	server := api.NewServer(e)
-	router := api.NewRouter(server, apiKey)
+	router := api.NewRouter(server, st, limiter)
 
 	httpServer := &http.Server{
 		Addr:         addr,

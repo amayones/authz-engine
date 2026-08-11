@@ -45,6 +45,15 @@ type RelationStore interface {
 	ReadTuples(ctx context.Context, object, relation string) ([]model.RelationTuple, error)
 }
 
+// APIKeyStore mengelola kredensial client untuk HTTP API layer.
+type APIKeyStore interface {
+	// CreateAPIKey menyimpan hash dari key, bukan key mentahnya.
+	CreateAPIKey(ctx context.Context, keyHash string, key model.APIKey) error
+	// GetAPIKeyByHash dipakai saat autentikasi tiap request masuk.
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (model.APIKey, error)
+	RevokeAPIKey(ctx context.Context, keyHash string) error
+}
+
 // Store adalah gabungan RoleStore + SubjectStore + AttributeStore.
 // Ini yang dipakai oleh engine.
 type Store interface {
@@ -52,4 +61,5 @@ type Store interface {
 	SubjectStore
 	AttributeStore
 	RelationStore
+	APIKeyStore
 }

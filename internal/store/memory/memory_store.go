@@ -17,6 +17,7 @@ type MemoryStore struct {
 	subjectRoles      map[string]map[string]bool
 	subjectAttributes map[string]model.Attributes
 	relationTuples    []model.RelationTuple
+	apiKeys           map[string]model.APIKey
 }
 
 func New() *MemoryStore {
@@ -24,6 +25,7 @@ func New() *MemoryStore {
 		roles:             make(map[string]model.Role),
 		subjectRoles:      make(map[string]map[string]bool),
 		subjectAttributes: make(map[string]model.Attributes),
+		apiKeys:           make(map[string]model.APIKey),
 	}
 }
 
@@ -205,4 +207,38 @@ func (s *MemoryStore) ReadTuples(_ context.Context, object, relation string) ([]
 		}
 	}
 	return result, nil
+}
+
+// --- APIKeyStore ---
+
+func (s *MemoryStore) CreateAPIKey(_ context.Context, keyHash string, key model.APIKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.apiKeys[keyHash]; exists {
+		return store.ErrAlreadyExists
+	}
+	s.apiKeys[keyHash] = key
+	return nil
+}
+
+func (s *MemoryStore) GetAPIKeyByHash(_ context.Context, keyHash string) (model.APIKey, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	key, exists := s.apiKeys[keyHash]
+	if !exists {
+		return model.APIKey{}, store.ErrNotFound
+	}
+	return key, nil
+}
+
+func (s *MemoryStore) RevokeAPIKey(_ context.Context, keyHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key, exists := s.apiKeys[keyHash]
+	if !exists {
+		return store.ErrNotFound
+	}
+	key.IsActive = false
+	s.apiKeys[keyHash] = key
+	return nil
 }

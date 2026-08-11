@@ -252,3 +252,44 @@ func (s *MSSQLStore) ReadTuples(ctx context.Context, object, relation string) ([
 	}
 	return tuples, nil
 }
+
+// --- APIKeyStore ---
+
+func (s *MSSQLStore) CreateAPIKey(ctx context.Context, keyHash string, key model.APIKey) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO api_keys (key_hash, client_name, rate_limit_rpm, is_active)
+		 VALUES (@p1, @p2, @p3, @p4)`,
+		keyHash, key.ClientName, key.RateLimitRPM, key.IsActive)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal insert api key: %w", err)
+	}
+	return nil
+}
+
+func (s *MSSQLStore) GetAPIKeyByHash(ctx context.Context, keyHash string) (model.APIKey, error) {
+	var key model.APIKey
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, client_name, rate_limit_rpm, is_active FROM api_keys WHERE key_hash = @p1`,
+		keyHash,
+	).Scan(&key.ID, &key.ClientName, &key.RateLimitRPM, &key.IsActive)
+	if err == sql.ErrNoRows {
+		return model.APIKey{}, store.ErrNotFound
+	}
+	if err != nil {
+		return model.APIKey{}, fmt.Errorf("mssql: gagal query api key: %w", err)
+	}
+	return key, nil
+}
+
+func (s *MSSQLStore) RevokeAPIKey(ctx context.Context, keyHash string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE api_keys SET is_active = 0 WHERE key_hash = @p1`, keyHash)
+	if err != nil {
+		return fmt.Errorf("mssql: gagal revoke api key: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/amayones/authz-engine/internal/store"
 )
 
 // loggingMiddleware mencatat tiap request: method, path, status, durasi.
@@ -45,25 +48,48 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// apiKeyMiddleware adalah proteksi paling dasar: cek header X-API-Key.
-// Ini BUKAN pengganti auth production-grade (belum ada rotation, rate
-// limit per key, dll) — cukup untuk mencegah akses publik tanpa izin
-// selama development/internal use.
-func apiKeyMiddleware(expectedKey string) func(http.Handler) http.Handler {
+// clientContextKey dipakai untuk menyimpan info client (dari API key)
+// ke request context, supaya handler bisa tahu siapa yang memanggil
+// kalau perlu (misal untuk audit log nanti).
+type contextKey string
+
+const clientContextKey contextKey = "client"
+
+// authMiddleware memverifikasi API key terhadap database, lalu terapkan
+// rate limit sesuai RateLimitRPM milik key tersebut.
+func authMiddleware(s store.APIKeyStore, limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Health check tidak perlu API key, supaya load balancer bisa cek.
 			if r.URL.Path == "/health" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			key := r.Header.Get("X-API-Key")
-			if key == "" || key != expectedKey {
-				writeError(w, http.StatusUnauthorized, "missing or invalid API key")
+			rawKey := r.Header.Get("X-API-Key")
+			if rawKey == "" {
+				writeError(w, http.StatusUnauthorized, "missing X-API-Key header")
 				return
 			}
-			next.ServeHTTP(w, r)
+
+			hash := hashAPIKey(rawKey)
+			apiKey, err := s.GetAPIKeyByHash(r.Context(), hash)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "invalid API key")
+				return
+			}
+			if !apiKey.IsActive {
+				writeError(w, http.StatusUnauthorized, "API key has been revoked")
+				return
+			}
+
+			if !limiter.Allow(hash, apiKey.RateLimitRPM) {
+				w.Header().Set("Retry-After", "60")
+				writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), clientContextKey, apiKey.ClientName)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

@@ -1,13 +1,14 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
 
-// NewRouter membangun http.Handler lengkap dengan semua endpoint dan
-// middleware terpasang. apiKey dipakai untuk proteksi X-API-Key.
-func NewRouter(s *Server, apiKey string) http.Handler {
+	"github.com/amayones/authz-engine/internal/store"
+)
+
+func NewRouter(s *Server, st store.APIKeyStore, limiter *RateLimiter) http.Handler {
 	mux := http.NewServeMux()
 
-	// Go 1.22+ method-based routing pattern.
 	mux.HandleFunc("GET /health", s.handleHealth)
 
 	mux.HandleFunc("POST /roles", s.handleCreateRole)
@@ -25,6 +26,6 @@ func NewRouter(s *Server, apiKey string) http.Handler {
 	return chain(mux,
 		recoveryMiddleware,
 		loggingMiddleware,
-		apiKeyMiddleware(apiKey),
+		authMiddleware(st, limiter),
 	)
 }
