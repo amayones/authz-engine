@@ -102,3 +102,12 @@ func chain(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler 
 	}
 	return h
 }
+
+// timeoutMiddleware memaksa tiap request punya batas waktu maksimum.
+// Ini mencegah satu request yang macet (misal query database yang
+// lambat) menahan resource selamanya.
+func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.TimeoutHandler(next, timeout, `{"error":"request timeout"}`)
+	}
+}

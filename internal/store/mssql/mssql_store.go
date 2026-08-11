@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/amayones/authz-engine/internal/model"
 	"github.com/amayones/authz-engine/internal/store"
@@ -19,19 +20,67 @@ type MSSQLStore struct {
 
 // New membuka koneksi ke SQL Server. connString formatnya:
 // "sqlserver://user:password@host:port?database=dbname"
+// PoolConfig mengatur batas connection pool. Nilai default (lewat New)
+// aman untuk service kecil-menengah; sesuaikan lewat NewWithConfig kalau
+// traffic sudah lebih besar.
+type PoolConfig struct {
+	MaxOpenConns    int           // total koneksi aktif maksimum ke SQL Server
+	MaxIdleConns    int           // koneksi menganggur yang tetap disimpan (reuse)
+	ConnMaxLifetime time.Duration // paksa recycle koneksi setelah durasi ini
+	ConnMaxIdleTime time.Duration // tutup koneksi idle setelah durasi ini
+}
+
+// DefaultPoolConfig cocok untuk service dengan traffic rendah-menengah
+// (puluhan hingga ratusan request/detik). Naikkan MaxOpenConns kalau
+// metrics nanti menunjukkan banyak request menunggu koneksi (lihat
+// db.Stats().WaitCount).
+func DefaultPoolConfig() PoolConfig {
+	return PoolConfig{
+		MaxOpenConns:    25,
+		MaxIdleConns:    10,
+		ConnMaxLifetime: 30 * time.Minute,
+		ConnMaxIdleTime: 5 * time.Minute,
+	}
+}
+
+// New membuka koneksi ke SQL Server dengan pool config default.
 func New(connString string) (*MSSQLStore, error) {
+	return NewWithConfig(connString, DefaultPoolConfig())
+}
+
+// NewWithConfig sama seperti New, tapi pool-nya bisa dikustomisasi —
+// dipakai kalau service butuh tuning khusus (misal batch job yang
+// butuh banyak koneksi paralel, atau service kecil yang mau hemat).
+func NewWithConfig(connString string, cfg PoolConfig) (*MSSQLStore, error) {
 	db, err := sql.Open("sqlserver", connString)
 	if err != nil {
 		return nil, fmt.Errorf("mssql: gagal buka koneksi: %w", err)
 	}
-	if err := db.Ping(); err != nil {
+
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("mssql: gagal ping database: %w", err)
 	}
+
 	return &MSSQLStore{db: db}, nil
 }
 
 func (s *MSSQLStore) Close() error {
 	return s.db.Close()
+}
+
+// Stats mengembalikan statistik pool saat ini — berguna untuk expose
+// lewat endpoint /health atau metrics nanti (lihat berapa banyak
+// koneksi sedang dipakai, berapa yang menunggu, dll).
+func (s *MSSQLStore) Stats() sql.DBStats {
+	return s.db.Stats()
 }
 
 // --- RoleStore ---

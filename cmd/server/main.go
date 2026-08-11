@@ -8,6 +8,7 @@ import (
 
 	"github.com/amayones/authz-engine/internal/api"
 	"github.com/amayones/authz-engine/internal/engine"
+	"github.com/amayones/authz-engine/internal/migrate"
 	"github.com/amayones/authz-engine/internal/model"
 	"github.com/amayones/authz-engine/internal/store/mssql"
 )
@@ -15,6 +16,14 @@ import (
 func main() {
 	connString := getEnv("AUTHZ_DB_CONN", "sqlserver://may:may@localhost:1433?database=authzdb")
 	addr := getEnv("AUTHZ_ADDR", ":8080")
+	autoMigrate := getEnv("AUTHZ_AUTO_MIGRATE", "false")
+
+	if autoMigrate == "true" {
+		if err := migrate.Up(connString, "file://migrations"); err != nil {
+			log.Fatalf("migration gagal: %v", err)
+		}
+		log.Println("migration berhasil diterapkan")
+	}
 
 	st, err := mssql.New(connString)
 	if err != nil {

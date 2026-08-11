@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/amayones/authz-engine/internal/store"
 )
@@ -26,6 +27,7 @@ func NewRouter(s *Server, st store.APIKeyStore, limiter *RateLimiter) http.Handl
 	return chain(mux,
 		recoveryMiddleware,
 		loggingMiddleware,
+		timeoutMiddleware(8*time.Second),
 		authMiddleware(st, limiter),
 	)
 }

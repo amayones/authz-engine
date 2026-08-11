@@ -1,0 +1,4 @@
+CREATE TABLE roles (
+    name NVARCHAR(100) PRIMARY KEY,
+    permissions NVARCHAR(MAX) NOT NULL
+);
