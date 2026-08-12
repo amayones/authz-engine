@@ -1,0 +1,22 @@
+# Binary files
+*.exe
+*.bin
+
+# Go build artifacts
+authz-server
+authz-genkey
+
+# Tunnel binaries
+cloudflared.exe
+ngrok.exe
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
