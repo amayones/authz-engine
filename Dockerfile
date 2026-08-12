@@ -1,17 +1,18 @@
-FROM golang:1.26 AS build
+# Build stage
+FROM golang:1.26-alpine AS build
 
 WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
+RUN CGO_ENABLED=0 go build -o /app/authz-server ./cmd/server
 
-RUN go mod tidy
-RUN go build -o /app/authz-server ./cmd/server
-RUN go build -o /app/authz-genkey ./cmd/genkey
-
-FROM golang:1.26
+# Runtime stage — image kecil & aman
+FROM alpine:3.20
 
 WORKDIR /app
 COPY --from=build /app/authz-server /app/authz-server
-COPY --from=build /app/authz-genkey /app/authz-genkey
 COPY --from=build /app/migrations /app/migrations
 
 ENV AUTHZ_DB_DRIVER=postgres

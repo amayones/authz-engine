@@ -1,0 +1,22 @@
+# Railway Blueprint — https://railway.app
+# Auto-deploy dari GitHub. Railway mendeteksi Go natively.
+#
+# Cara pakai:
+# 1. Login https://railway.app (GitHub/email, gratis $5 kredit/bulan)
+# 2. Klik "New Project" → "Deploy from GitHub repo" → pilih repo ini
+# 3. Railway otomatis build & deploy Go app
+# 4. Set Variables di dashboard Railway
+#
+# Catatan: $5 kredit gratis cukup untuk 1 service ringan per bulan.
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "go build -o authz-server ./cmd/server"
+
+[deploy]
+startCommand = "./authz-server"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+
+[deploy.healthcheck]
+path = "/health"
