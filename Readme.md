@@ -1,54 +1,46 @@
 # authz-engine
 
-Embeddable authorization engine untuk Go yang mendukung **RBAC**, **ABAC**, dan **ReBAC** dalam satu titik keputusan melalui `Can()`.
+**Authorization engine untuk Go** yang mendukung **RBAC**, **ABAC**, dan **ReBAC** dalam satu titik keputusan melalui `Can()`.
 
-`authz-engine` dapat digunakan sebagai:
-
-* Go library
-* HTTP authorization service
-* Authorization backend dengan SQL Server
-* In-memory engine untuk testing dan development
+Bisa dipakai sebagai:
+- **Go library** — embed langsung di aplikasi Anda
+- **HTTP service** — REST API dengan autentikasi API key
+- **Backend SQL Server** — penyimpanan persisten
 
 ---
 
-## Daftar Isi
+## 📋 Daftar Isi
 
-* [Fitur](#fitur)
-* [Arsitektur](#arsitektur)
-* [Instalasi](#instalasi)
-* [Setup Database](#setup-database)
-* [Migration](#migration)
-* [Menjalankan Server](#menjalankan-server)
-* [Membuat API Key](#membuat-api-key)
-* [Pemakaian sebagai Go Library](#pemakaian-sebagai-go-library)
-* [HTTP API](#http-api)
-* [Autentikasi dan Rate Limiting](#autentikasi-dan-rate-limiting)
-* [Observability](#observability)
-* [Testing dan Benchmark](#testing-dan-benchmark)
-* [Konfigurasi Production](#konfigurasi-production)
-* [Roadmap](#roadmap)
+- [Fitur](#fitur)
+- [Konsep Dasar](#konsep-dasar)
+- [Arsitektur](#arsitektur)
+- [Instalasi](#instalasi)
+- [Menjalankan Server](#menjalankan-server)
+- [Membuat API Key](#membuat-api-key)
+- [HTTP API](#http-api)
+- [Pemakaian sebagai Go Library](#pemakaian-sebagai-go-library)
+- [Konfigurasi](#konfigurasi)
+- [Observability](#observability)
+- [Testing](#testing)
+- [Deployment](#deployment)
 
 ---
 
-## Fitur
+## ✨ Fitur
 
-### RBAC
+### RBAC (Role-Based Access Control)
 
-Role-based access control dengan permission dan wildcard.
-
-Contoh:
+Kontrol akses berbasis **role**. Setiap role punya daftar permission.
 
 ```text
-invoice:read
-invoice:write
-invoice:*
+invoice:read      → boleh baca invoice
+invoice:write     → boleh tulis invoice
+invoice:*         → boleh semua aksi pada invoice (wildcard)
 ```
 
-### ABAC
+### ABAC (Attribute-Based Access Control)
 
-Role dapat memiliki `Conditions` yang dievaluasi berdasarkan context request.
-
-Contoh:
+Role bisa punya **kondisi** yang dievaluasi berdasarkan context request.
 
 ```json
 {
@@ -56,18 +48,17 @@ Contoh:
 }
 ```
 
-### ReBAC
+Artinya: role hanya berlaku jika context request punya `same_department=true`.
 
-Relationship-based access control dengan model relasi seperti Google Zanzibar.
+### ReBAC (Relationship-Based Access Control)
+
+Kontrol akses berbasis **relasi** antar objek (model Google Zanzibar).
 
 Mendukung:
-
-* Direct relation
-* Hierarki relation
-* Userset/group
-* Relationship inheritance
-
-Contoh:
+- Direct relation (langsung)
+- Hierarki relation (parent/child)
+- Userset/group (keanggotaan grup)
+- Relationship inheritance (pewarisan relasi)
 
 ```text
 owner → editor → viewer
@@ -76,467 +67,363 @@ group:eng#member
 
 ### Unified `Can()`
 
-`Can()` dapat mengevaluasi:
-
-* RBAC
-* ABAC
-* ReBAC
-* kombinasi RBAC + ABAC + ReBAC
-
-Authorization menggunakan logika OR antar jalur. Jika salah satu jalur memberikan izin, request dianggap allowed.
+Satu fungsi `Can()` bisa mengevaluasi **RBAC + ABAC + ReBAC sekaligus**.
+Jika salah satu jalur memberi izin, request dianggap **allowed**.
 
 ### Caching
 
-TTL cache opsional untuk:
-
-* `Can()`
-* `CheckRelation()`
-
-Cache diinvalidasi ketika terjadi perubahan data yang relevan.
-
-### HTTP API
-
-HTTP API menggunakan `net/http` standar tanpa router pihak ketiga.
+TTL cache opsional untuk mempercepat `Can()` dan `CheckRelation()`.
+Cache otomatis diinvalidasi saat data berubah.
 
 ### API Key Authentication
 
-Setiap client memiliki API key sendiri.
-
-API key:
-
-* disimpan sebagai SHA-256 hash
-* dapat diaktifkan/dinonaktifkan
-* memiliki rate limit masing-masing
+Setiap client punya API key sendiri:
+- Disimpan sebagai **SHA-256 hash** (bukan plaintext)
+- Bisa diaktifkan/dinonaktifkan
+- Punya **rate limit** masing-masing
 
 ### Audit Log
 
-Perubahan state dicatat ke database, termasuk:
-
-* create role
-* assign role
-* revoke role
-* create relation
-* delete relation
-* set attribute
+Semua perubahan state dicatat ke database:
+- create role
+- assign role
+- revoke role
+- create relation
+- delete relation
+- set attribute
 
 ### Observability
 
-Menyediakan:
-
-* structured logging menggunakan `log/slog`
-* decision log
-* Prometheus metrics
-* database connection pool statistics
-
-### Database Migration
-
-Schema database dikelola menggunakan `golang-migrate`.
-
-Tidak diperlukan pembuatan atau perubahan schema secara manual melalui SSMS setelah migration digunakan.
-
-### Storage
-
-Backend yang tersedia:
-
-* In-memory — testing/development
-* SQL Server — persistent storage
-
-Backend lain dapat ditambahkan dengan mengimplementasikan `store.Store`.
+- Structured logging (`log/slog`)
+- Decision log
+- Prometheus metrics
+- Database connection pool stats
 
 ---
 
-## Arsitektur
+## 🧠 Konsep Dasar
+
+### Subject
+
+Entitas yang meminta akses — biasanya user, tapi bisa juga service-account.
+
+```text
+user:alice
+user:bob
+service:billing
+```
+
+### Permission
+
+Satu izin atomik dalam format `resource:action`.
+
+```text
+invoice:read
+invoice:write
+invoice:delete
+```
+
+### Role
+
+Kumpulan permission yang bisa di-assign ke subject.
+
+```go
+model.Role{
+    Name: "editor",
+    Permissions: []model.Permission{
+        "invoice:read",
+        "invoice:write",
+    },
+}
+```
+
+### AccessRequest
+
+Pertanyaan: *"Apakah subject ini boleh melakukan action pada resource ini?"*
+
+```go
+model.AccessRequest{
+    SubjectID: "user:alice",
+    Resource:  "invoice",
+    Action:    "read",
+}
+```
+
+### RelationTuple
+
+Unit dasar ReBAC: pernyataan bahwa `Subject` punya `Relation` terhadap `Object`.
+
+```text
+document:123  ←  owner  ←  user:alice
+```
+
+### RelationSchema
+
+Hierarki relasi. Jika `viewer` berisi `editor` dan `owner`, maka siapa pun yang punya relasi `editor` atau `owner` otomatis dianggap `viewer`.
+
+```go
+model.RelationSchema{
+    "viewer": {"editor", "owner"},
+    "editor": {"owner"},
+}
+```
+
+---
+
+## 🏗️ Arsitektur
 
 ```text
 authz-engine/
 ├── cmd/
-│   ├── server/              # HTTP server
+│   ├── server/              # HTTP server (main entry)
 │   └── genkey/              # CLI untuk membuat API key
 │
 ├── internal/
-│   ├── model/               # Model inti
-│   ├── store/               # Store interface + implementations
-│   │   ├── memory/
-│   │   └── mssql/
-│   ├── engine/              # Logic authorization
+│   ├── model/               # Tipe data inti (Role, Permission, dll.)
+│   ├── store/               # Interface penyimpanan + implementasi
+│   │   ├── memory/          # In-memory store (testing/development)
+│   │   └── mssql/           # SQL Server store (production)
+│   ├── engine/              # Logic authorization (Can, CheckRelation)
 │   ├── cache/               # Generic TTL cache
 │   ├── api/                 # HTTP handlers, middleware, metrics
-│   └── migrate/             # Migration wrapper
+│   └── migrate/             # Database migration wrapper
 │
-├── migrations/              # Database migrations
+├── migrations/              # SQL migration files
 ├── examples/                # Contoh penggunaan
-├── go.mod
-└── README.md
+├── start.bat                # Script start server (Windows)
+├── stop.bat                 # Script stop server (Windows)
+├── tunnel.bat               # Script tunnel publik (Windows)
+├── DEPLOY.md                # Panduan deployment & self-hosting
+└── go.mod
 ```
 
-### Prinsip desain
+### Prinsip Desain
 
-`engine` hanya bergantung pada interface `store.Store`, bukan implementasi database tertentu.
-
-Engine juga tidak bergantung langsung pada library metrics. Observability menggunakan callback `DecisionHook`.
-
-Dengan desain ini:
-
-* storage dapat diganti tanpa mengubah authorization logic
-* metrics backend dapat diganti
-* engine dapat digunakan tanpa HTTP API
-* engine dapat digunakan dengan in-memory store untuk testing
+- `engine` hanya bergantung pada **interface** `store.Store`, bukan implementasi database tertentu
+- Storage bisa diganti tanpa mengubah logic authorization
+- Engine bisa dipakai tanpa HTTP API
+- Engine bisa dipakai dengan in-memory store untuk testing
 
 ---
 
-## Instalasi
+## 🚀 Instalasi
 
 ### Prasyarat
 
-* Go 1.22+
-* SQL Server — hanya diperlukan jika menggunakan persistent storage
-* `golang-migrate` CLI — diperlukan untuk menjalankan migration dari terminal
+- **Go 1.22+** — https://go.dev/dl/
+- **SQL Server** — hanya jika pakai persistent storage
 
-Download Go:
-
-```text
-https://go.dev/dl/
-```
-
-### Clone Repository
+### Clone & Build
 
 ```bash
 git clone https://github.com/amayones/authz-engine.git
 cd authz-engine
-```
 
-### Install Dependency
-
-```bash
 go mod tidy
-```
-
-### Build
-
-```bash
 go build ./...
 ```
 
 ---
 
-# Setup Database
+## ▶️ Menjalankan Server
 
-## 1. Buat Database
-
-Buat database kosong di SQL Server.
-
-Contoh:
-
-```sql
-CREATE DATABASE authzdb;
-```
-
-Pastikan user yang digunakan aplikasi memiliki permission terhadap database tersebut.
-
----
-
-## 2. Connection String
-
-Format connection string:
-
-```text
-sqlserver://USER:PASSWORD@HOST:1433?database=DATABASE&encrypt=true&trustservercertificate=true
-```
-
-Contoh:
-
-```text
-sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
-```
-
-### Penting
-
-Jangan melakukan escaping pada `:` atau `@`.
-
-Benar:
-
-```text
-sqlserver://may:may@localhost:1433?database=authzdb
-```
-
-Salah:
-
-```text
-sqlserver://may\:may\@localhost:1433?database=authzdb
-```
-
-Connection string juga tidak boleh memiliki karakter newline di bagian akhir.
-
----
-
-# Migration
-
-Schema database dikelola menggunakan `golang-migrate`.
-
-Migration berada di:
-
-```text
-migrations/
-```
-
-Contoh:
-
-```text
-migrations/
-├── 000001_init.up.sql
-├── 000001_init.down.sql
-├── 000002_add_x.up.sql
-└── 000002_add_x.down.sql
-```
-
-## Install `migrate`
-
-Install CLI:
+### Cara 1: Pakai `start.bat` (Windows, paling mudah)
 
 ```bash
-go install -tags 'sqlserver' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+start.bat
 ```
 
-Pastikan command tersedia:
+Script ini otomatis:
+1. Build `authz-server.exe` jika belum ada
+2. Set environment variables
+3. Jalankan server di `http://localhost:8080`
+
+### Cara 2: Manual
 
 ```bash
-migrate -version
-```
-
----
-
-## Set Connection String
-
-### Git Bash
-
-Gunakan single quote agar connection string diteruskan apa adanya:
-
-```bash
-export AUTHZ_DB_CONN='sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
-```
-
-Cek:
-
-```bash
-echo "$AUTHZ_DB_CONN"
-```
-
-Output harus berupa:
-
-```text
-sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
-```
-
----
-
-## Menjalankan Semua Migration
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations up
-```
-
-Perintah ini menjalankan seluruh migration yang belum diterapkan.
-
----
-
-## Melihat Versi Migration
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations version
-```
-
-Contoh:
-
-```text
-3
-```
-
-Jika database masih kosong, version table akan dibuat otomatis oleh migrate.
-
----
-
-## Rollback Satu Migration
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations down 1
-```
-
-Contoh:
-
-```text
-3 → 2
-```
-
----
-
-## Rollback Semua Migration
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations down
-```
-
-Gunakan dengan hati-hati karena seluruh schema yang dibuat migration akan dihapus.
-
----
-
-## Membuat Migration Baru
-
-Jika ingin menambahkan perubahan schema:
-
-```bash
-migrate create -ext sql -dir migrations -seq nama_perubahan
-```
-
-Contoh:
-
-```bash
-migrate create -ext sql -dir migrations -seq add_client_description
-```
-
-Akan menghasilkan:
-
-```text
-migrations/
-├── 000001_init.up.sql
-├── 000001_init.down.sql
-├── 000002_add_client_description.up.sql
-└── 000002_add_client_description.down.sql
-```
-
-Isi `.up.sql` dengan perubahan schema.
-
-Contoh:
-
-```sql
-ALTER TABLE api_keys
-ADD description NVARCHAR(255) NULL;
-```
-
-Isi `.down.sql` dengan rollback:
-
-```sql
-ALTER TABLE api_keys
-DROP COLUMN description;
-```
-
-Kemudian jalankan:
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations up
-```
-
----
-
-## Force Migration Version
-
-Gunakan `force` **hanya jika migration state di database tidak sesuai dengan file migration**.
-
-Contoh:
-
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations force 1
-```
-
-`force` hanya mengubah version migration dan tidak menjalankan SQL migration.
-
-Ini berguna jika:
-
-* database pernah dibuat manual
-* migration pernah gagal
-* migration version perlu disinkronkan
-* schema database sudah sesuai tetapi migration table belum sesuai
-
-Setelah menggunakan `force`, pastikan schema database benar sebelum menjalankan migration berikutnya.
-
----
-
-# Menjalankan Server
-
-Set environment variable:
-
-```bash
-export AUTHZ_DB_CONN='sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
-export AUTHZ_ADDR=':8080'
-export AUTHZ_AUTO_MIGRATE='false'
-```
-
-Kemudian:
-
-```bash
+# Windows (Command Prompt)
+set AUTHZ_DB_DRIVER=sqlserver
+set AUTHZ_DB_CONN=sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+set AUTHZ_ADDR=:8080
+set AUTHZ_AUTO_MIGRATE=true
 go run ./cmd/server
 ```
 
-Server menggunakan:
-
-```text
-AUTHZ_ADDR
-```
-
-dengan default:
-
-```text
-:8080
-```
-
-### Auto Migration
-
-Untuk menjalankan migration otomatis saat server startup:
-
 ```bash
+# Linux / Mac
+export AUTHZ_DB_DRIVER=sqlserver
+export AUTHZ_DB_CONN='sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
+export AUTHZ_ADDR=':8080'
 export AUTHZ_AUTO_MIGRATE='true'
 go run ./cmd/server
 ```
 
-Untuk production, migration sebaiknya dijalankan sebagai bagian dari proses deployment, bukan saat setiap instance server startup.
-
----
-
-## Health Check
-
-Endpoint health check tidak membutuhkan API key:
+### Verifikasi
 
 ```bash
 curl http://localhost:8080/health
 ```
 
 Response:
-
 ```json
-{
-  "status": "ok"
-}
+{"status":"ok"}
 ```
 
 ---
 
-# Membuat API Key
+## 🔑 Membuat API Key
 
-API key pertama dibuat melalui CLI:
+API key dibuat via CLI `cmd/genkey`:
 
 ```bash
 go run ./cmd/genkey \
-  -db "$AUTHZ_DB_CONN" \
-  -name "amayones" \
+  -db "sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true" \
+  -name "client1" \
   -rpm 120
 ```
 
-Atau satu baris:
-
-```bash
-go run ./cmd/genkey -db "$AUTHZ_DB_CONN" -name "amayones" -rpm 120
+Output:
+```
+API key berhasil dibuat. SIMPAN SEKARANG — tidak akan ditampilkan lagi:
+ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-API key mentah hanya ditampilkan sekali.
-
-Simpan key tersebut dengan aman.
-
-Server hanya menyimpan hash SHA-256 dari API key.
+> **PENTING**: API key hanya ditampilkan **sekali**. Server hanya menyimpan hash SHA-256.
 
 ---
 
-# Pemakaian sebagai Go Library
+## 🌐 HTTP API
 
-Contoh penggunaan:
+Semua endpoint membutuhkan header:
+
+```http
+X-API-Key: ak_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Kecuali:
+- `GET /health` — health check
+- `GET /metrics` — Prometheus metrics
+
+### POST `/roles` — Buat role
+
+```json
+{
+  "name": "editor",
+  "permissions": ["invoice:read", "invoice:write"],
+  "conditions": [
+    {"attr_key": "same_department", "attr_value": "true"}
+  ]
+}
+```
+
+Response: `201 Created`
+
+### POST `/roles/assign` — Assign role ke user
+
+```json
+{
+  "subject_id": "user:alice",
+  "role_name": "editor"
+}
+```
+
+### POST `/roles/revoke` — Cabut role dari user
+
+```json
+{
+  "subject_id": "user:alice",
+  "role_name": "editor"
+}
+```
+
+### POST `/can` — Cek izin (endpoint utama)
+
+**RBAC / ABAC:**
+```json
+{
+  "subject_id": "user:alice",
+  "resource": "invoice",
+  "action": "read",
+  "context": {"same_department": "true"}
+}
+```
+
+**ReBAC:**
+```json
+{
+  "subject_id": "user:bob",
+  "action": "viewer",
+  "object": "document:123"
+}
+```
+
+Response:
+```json
+{"allowed": true}
+```
+
+### POST `/relations` — Buat relasi ReBAC
+
+```json
+{
+  "object": "document:123",
+  "relation": "owner",
+  "subject": "user:alice"
+}
+```
+
+### DELETE `/relations` — Hapus relasi ReBAC
+
+```json
+{
+  "object": "document:123",
+  "relation": "owner",
+  "subject": "user:alice"
+}
+```
+
+### POST `/relations/check` — Cek relasi ReBAC langsung
+
+```json
+{
+  "object": "document:123",
+  "relation": "viewer",
+  "subject": "user:bob"
+}
+```
+
+Response:
+```json
+{"allowed": true}
+```
+
+### POST `/attributes` — Set atribut subject (untuk ABAC)
+
+```json
+{
+  "subject_id": "user:alice",
+  "key": "department",
+  "value": "engineering"
+}
+```
+
+### Error Response
+
+```json
+{"error": "pesan error"}
+```
+
+| Status | Keterangan |
+|--------|------------|
+| `400` | Request tidak valid |
+| `401` | API key tidak valid |
+| `409` | Data sudah ada |
+| `429` | Rate limit terlampaui |
+| `500` | Internal server error |
+
+---
+
+## 📦 Pemakaian sebagai Go Library
 
 ```go
 package main
@@ -553,13 +440,16 @@ import (
 func main() {
     ctx := context.Background()
 
+    // Buat engine dengan in-memory store
     e := engine.New(memory.New())
 
+    // Set hierarki relasi ReBAC
     e.SetSchema(model.RelationSchema{
         "viewer": {"editor", "owner"},
         "editor": {"owner"},
     })
 
+    // Buat role
     _ = e.CreateRoleWithConditions(ctx, model.Role{
         Name: "editor",
         Permissions: []model.Permission{
@@ -568,450 +458,143 @@ func main() {
         },
     })
 
+    // Assign role ke user
     _ = e.AssignRole(ctx, "user:alice", "editor")
 
+    // Cek izin
     allowed, _ := e.Can(ctx, model.AccessRequest{
         SubjectID: "user:alice",
         Resource:  "invoice",
         Action:    "read",
     })
 
-    fmt.Println("allowed:", allowed)
+    fmt.Println("allowed:", allowed) // allowed: true
 }
 ```
 
-Untuk contoh tambahan, lihat:
+Contoh lain ada di folder `examples/`:
+- `examples/basic/` — RBAC sederhana
+- `examples/rebac/` — ReBAC dengan relasi
+- `examples/unified/` — Kombinasi RBAC + ABAC + ReBAC
+
+---
+
+## ⚙️ Konfigurasi
+
+### Environment Variables
+
+| Variable | Default | Keterangan |
+|----------|---------|------------|
+| `AUTHZ_DB_DRIVER` | `sqlserver` | Driver database |
+| `AUTHZ_DB_CONN` | `sqlserver://may:may@localhost:1433?database=authzdb` | Connection string SQL Server |
+| `AUTHZ_ADDR` | `:8080` | HTTP listen address |
+| `AUTHZ_AUTO_MIGRATE` | `false` | Jalankan migration saat startup |
+
+### Connection String SQL Server
 
 ```text
-examples/
+sqlserver://USER:PASSWORD@HOST:1433?database=DATABASE&encrypt=true&trustservercertificate=true
 ```
 
----
-
-# HTTP API
-
-Semua endpoint membutuhkan header:
-
-```http
-X-API-Key: ak_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-kecuali:
-
+Contoh:
 ```text
-GET /health
-GET /metrics
+sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 ```
 
-Body dan response menggunakan JSON.
-
----
-
-## POST `/roles`
-
-Membuat role.
-
-Request:
-
-```json
-{
-  "name": "editor",
-  "permissions": [
-    "invoice:read",
-    "invoice:write"
-  ],
-  "conditions": [
-    {
-      "attr_key": "same_department",
-      "attr_value": "true"
-    }
-  ]
-}
-```
-
-Response:
-
-```json
-{
-  "status": "created"
-}
-```
-
-Status:
-
-```text
-201 Created
-```
-
----
-
-## POST `/roles/assign`
-
-Assign role ke subject.
-
-```json
-{
-  "subject_id": "user:alice",
-  "role_name": "editor"
-}
-```
-
----
-
-## POST `/roles/revoke`
-
-Mencabut role dari subject.
-
-```json
-{
-  "subject_id": "user:alice",
-  "role_name": "editor"
-}
-```
-
----
-
-## POST `/can`
-
-Endpoint utama authorization.
-
-### RBAC / ABAC
-
-```json
-{
-  "subject_id": "user:alice",
-  "resource": "invoice",
-  "action": "read",
-  "context": {
-    "same_department": "true"
-  }
-}
-```
-
-### ReBAC
-
-Isi `object` untuk melakukan pengecekan relation.
-
-```json
-{
-  "subject_id": "user:bob",
-  "action": "viewer",
-  "object": "document:123"
-}
-```
-
-Response:
-
-```json
-{
-  "allowed": true
-}
-```
-
----
-
-## POST `/relations`
-
-Membuat relationship tuple.
-
-```json
-{
-  "object": "document:123",
-  "relation": "owner",
-  "subject": "user:alice"
-}
-```
-
----
-
-## DELETE `/relations`
-
-Menghapus relationship tuple.
-
-```json
-{
-  "object": "document:123",
-  "relation": "owner",
-  "subject": "user:alice"
-}
-```
-
----
-
-## POST `/relations/check`
-
-Mengecek ReBAC secara langsung tanpa RBAC.
-
-```json
-{
-  "object": "document:123",
-  "relation": "viewer",
-  "subject": "user:bob"
-}
-```
-
-Response:
-
-```json
-{
-  "allowed": true
-}
-```
-
----
-
-## POST `/attributes`
-
-Menyimpan attribute subject untuk kebutuhan ABAC.
-
-```json
-{
-  "subject_id": "user:alice",
-  "key": "department",
-  "value": "engineering"
-}
-```
-
----
-
-## GET `/health`
-
-Health check tanpa API key.
-
----
-
-## GET `/metrics`
-
-Prometheus metrics tanpa API key.
-
-Jika server terekspos ke jaringan publik, endpoint ini sebaiknya dibatasi menggunakan firewall atau network policy.
-
----
-
-## Error Response
-
-Format error:
-
-```json
-{
-  "error": "pesan error"
-}
-```
-
-Status code:
-
-| Status | Keterangan                         |
-| ------ | ---------------------------------- |
-| `400`  | Request tidak valid                |
-| `401`  | API key tidak valid atau tidak ada |
-| `409`  | Data sudah ada                     |
-| `429`  | Rate limit terlampaui              |
-| `500`  | Internal server error              |
-
----
-
-# Autentikasi dan Rate Limiting
-
-Setiap client memiliki API key sendiri.
-
-API key:
-
-* dibuat melalui `cmd/genkey`
-* disimpan sebagai SHA-256 hash
-* tidak disimpan dalam bentuk plaintext
-* dapat dinonaktifkan tanpa menghapus history
-
-Rate limit dikonfigurasi saat membuat API key:
-
-```bash
-go run ./cmd/genkey \
-  -db "$AUTHZ_DB_CONN" \
-  -name "amayones" \
-  -rpm 120
-```
-
-Gunakan API key melalui:
-
-```http
-X-API-Key: ak_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-Rate limiting menggunakan token bucket dan diterapkan per API key.
-
----
-
-# Observability
-
-## Audit Log
-
-Perubahan state dicatat ke tabel:
-
-```text
-audit_log
-```
-
-Contoh query:
-
-```sql
-SELECT *
-FROM audit_log
-ORDER BY occurred_at DESC;
-```
-
-Audit log mencatat:
-
-* actor
-* action
-* target
-* timestamp
-
----
-
-## Decision Log
-
-Setiap evaluasi:
-
-```text
-Can()
-CheckRelation()
-```
-
-dicatat sebagai structured log menggunakan `log/slog`.
-
-Log mencakup informasi seperti:
-
-* subject
-* action
-* object/resource
-* hasil authorization
-* cache hit/miss
-
-Log dapat dikirim ke sistem seperti Loki atau ELK.
-
----
-
-## Prometheus Metrics
-
-Endpoint:
-
-```text
-GET /metrics
-```
-
-Metrics utama:
-
-| Metric                                | Keterangan                                                  |
-| ------------------------------------- | ----------------------------------------------------------- |
-| `authz_http_requests_total`           | Total HTTP request berdasarkan endpoint, method, dan status |
-| `authz_http_request_duration_seconds` | Histogram latency HTTP request                              |
-| `authz_decisions_total`               | Total authorization decision berdasarkan jenis dan hasil    |
-| `authz_cache_hits_total`              | Cache hit dan miss                                          |
-| `authz_rate_limit_rejected_total`     | Request yang ditolak karena rate limit                      |
-
----
-
-# Testing dan Benchmark
-
-Build:
-
-```bash
-go build ./...
-```
-
-Static analysis:
-
-```bash
-go vet ./...
-```
-
-Test:
-
-```bash
-go test ./... -v -race
-```
-
-Benchmark:
-
-```bash
-go test ./internal/engine -bench=. -benchmem -run=^$
-```
-
-Unit test engine menggunakan in-memory store sehingga tidak membutuhkan SQL Server.
-
-Untuk integration test SQL Server, gunakan database test terpisah dan set:
-
-```bash
-export AUTHZ_DB_CONN='sqlserver://user:password@localhost:1433?database=authz_test&encrypt=true&trustservercertificate=true'
-```
-
----
-
-# Konfigurasi Production
-
-| Environment Variable | Default                                               | Keterangan                         |
-| -------------------- | ----------------------------------------------------- | ---------------------------------- |
-| `AUTHZ_DB_CONN`      | `sqlserver://may:may@localhost:1433?database=authzdb` | SQL Server connection string       |
-| `AUTHZ_ADDR`         | `:8080`                                               | HTTP listen address                |
-| `AUTHZ_AUTO_MIGRATE` | `false`                                               | Menjalankan migration saat startup |
+> **PENTING**: Jangan escape `:` atau `@` di connection string.
 
 ### Connection Pool
 
-Default:
-
-```text
-MaxOpenConns:      25
-MaxIdleConns:      10
-ConnMaxLifetime:   30m
-ConnMaxIdleTime:   5m
-```
-
-Gunakan `NewWithConfig()` jika membutuhkan tuning khusus.
+| Setting | Default |
+|---------|---------|
+| MaxOpenConns | 25 |
+| MaxIdleConns | 10 |
+| ConnMaxLifetime | 30m |
+| ConnMaxIdleTime | 5m |
 
 ### Request Timeout
 
 HTTP request memiliki timeout 8 detik.
 
-### TLS
+---
 
-`authz-engine` tidak menangani HTTPS secara langsung.
+## 📊 Observability
 
-Untuk production, jalankan di belakang reverse proxy seperti:
+### Audit Log
 
-```text
-Client
-  ↓
-HTTPS
-  ↓
-Nginx / Caddy
-  ↓
-authz-engine :8080
+Semua perubahan state dicatat ke tabel `audit_log`:
+
+```sql
+SELECT * FROM audit_log ORDER BY occurred_at DESC;
 ```
 
-### Migration
+### Decision Log
 
-Untuk production, jalankan migration sebagai langkah deployment:
+Setiap evaluasi `Can()` dan `CheckRelation()` dicatat sebagai structured log (`log/slog`).
 
-```bash
-migrate -database "$AUTHZ_DB_CONN" -path ./migrations up
-```
+### Prometheus Metrics
 
-Kemudian jalankan server:
+Endpoint: `GET /metrics`
 
-```bash
-go run ./cmd/server
-```
-
-Hindari mengandalkan `AUTHZ_AUTO_MIGRATE=true` pada deployment production multi-instance karena setiap instance dapat mencoba melakukan migration saat startup.
-
-### Metrics
-
-Endpoint `/metrics` tidak membutuhkan API key.
-
-Batasi aksesnya menggunakan:
-
-* firewall
-* private network
-* reverse proxy
-* network policy
+| Metric | Keterangan |
+|--------|------------|
+| `authz_http_requests_total` | Total HTTP request |
+| `authz_http_request_duration_seconds` | Histogram latency |
+| `authz_decisions_total` | Total keputusan authorization |
+| `authz_cache_hits_total` | Cache hit/miss |
+| `authz_rate_limit_rejected_total` | Request ditolak rate limit |
 
 ---
+
+## 🧪 Testing
+
+```bash
+# Build
+go build ./...
+
+# Static analysis
+go vet ./...
+
+# Test (dengan race detector)
+go test ./... -v -race
+
+# Benchmark
+go test ./internal/engine -bench=. -benchmem -run=^$
+```
+
+Unit test engine menggunakan in-memory store — **tidak butuh SQL Server**.
+
+---
+
+## 🚢 Deployment
+
+### Self-Hosting (PC/Laptop)
+
+Panduan lengkap ada di **`DEPLOY.md`**:
+
+1. **Build**: `go build -o authz-server.exe ./cmd/server`
+2. **Jalankan**: `start.bat`
+3. **Akses publik**: `tunnel.bat` (Cloudflare/ngrok)
+
+### Script yang Tersedia
+
+| Script | Fungsi |
+|--------|--------|
+| `start.bat` | Jalankan server (build otomatis + set env) |
+| `stop.bat` | Stop server |
+| `tunnel.bat` | Tunnel publik (Cloudflare/ngrok) |
+
+### Docker
+
+```bash
+docker build -t authz-engine .
+docker run -p 8080:8080 \
+  -e AUTHZ_DB_CONN="sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true" \
+  authz-engine
+```
+
+---
+
+## 📄 Lisensi
+
+Proyek ini open-source. Silakan gunakan, modifikasi, dan distribusikan sesuai kebutuhan.
