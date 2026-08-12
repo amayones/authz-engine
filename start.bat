@@ -4,12 +4,13 @@ cd /d %~dp0
 
 REM ============================================
 REM  authz-engine - Self-Hosted Server
+REM  Database: SQL Server (lokal)
 REM  Edit konfigurasi di bawah sesuai kebutuhan
 REM ============================================
 
-REM Database: PostgreSQL lokal atau Supabase
-set AUTHZ_DB_DRIVER=postgres
-set AUTHZ_DB_CONN=postgresql://postgres:PASSWORD@localhost:5432/authzdb
+REM Database: SQL Server lokal
+set AUTHZ_DB_DRIVER=sqlserver
+set AUTHZ_DB_CONN=sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 
 REM HTTP server
 set AUTHZ_ADDR=:8080

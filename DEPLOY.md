@@ -1,6 +1,6 @@
-# Panduan Self-Hosting — Jalankan dari PC/Laptop
+# Panduan Self-Hosting — Jalankan dari PC/Laptop (SQL Server)
 
-Panduan ini menjelaskan cara menjalankan `authz-engine` **langsung dari PC/laptop Anda** (self-host), tanpa perlu layanan cloud berbayar.
+Panduan ini menjelaskan cara menjalankan `authz-engine` **langsung dari PC/laptop Anda** (self-host) menggunakan **SQL Server** yang sudah terinstall di laptop Anda.
 
 ---
 
@@ -8,46 +8,41 @@ Panduan ini menjelaskan cara menjalankan `authz-engine` **langsung dari PC/lapto
 
 | Komponen | Cara |
 |----------|------|
-| Aplikasi Go | Jalankan langsung dari PC/laptop (Windows/Linux/Mac) |
-| Database | PostgreSQL lokal (gratis) atau Supabase (gratis 500MB) |
+| Aplikasi Go | Jalankan langsung dari PC/laptop (Windows) |
+| Database | **SQL Server** (sudah terinstall di laptop) |
 | Akses dari luar | Port forwarding / tunnel (ngrok, cloudflared) |
 
 ---
 
-## Opsi Database
+## Langkah 1: Siapkan Database di SQL Server
 
-### Opsi A: PostgreSQL Lokal (paling sederhana)
+### 1.1 Buat Database
 
-Install PostgreSQL di PC Anda:
+Buka **SQL Server Management Studio (SSMS)** atau **Azure Data Studio**, lalu jalankan:
 
-1. Download: https://www.postgresql.org/download/
-2. Install dengan default settings
-3. Buat database:
-   ```sql
-   CREATE DATABASE authzdb;
-   ```
-
-Connection string:
-```
-postgresql://postgres:YOUR_PASSWORD@localhost:5432/authzdb
+```sql
+CREATE DATABASE authzdb;
 ```
 
-### Opsi B: Supabase (gratis, tanpa install)
+### 1.2 Cek Connection String
 
-1. Buka https://supabase.com → **Start your project**
-2. **New project**:
-   - **Name**: `authz-engine`
-   - **Password**: buat password kuat
-   - **Region**: **Southeast Asia (Singapore)**
-3. **Settings → Database → Connection string** → pilih **URI**
-4. Salin connection string:
-   ```
-   postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
-   ```
+Format connection string SQL Server:
+
+```
+sqlserver://USER:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+```
+
+Contoh dengan user `sa`:
+
+```
+sqlserver://sa:password123@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+```
+
+> **PENTING**: Ganti `sa:password123` dengan user & password SQL Server Anda.
 
 ---
 
-## Langkah 1: Build Aplikasi
+## Langkah 2: Build Aplikasi
 
 Buka terminal di folder proyek:
 
@@ -57,40 +52,33 @@ go build -o authz-server.exe ./cmd/server
 go build -o authz-genkey.exe ./cmd/genkey
 ```
 
-> Di Linux/Mac: `go build -o authz-server ./cmd/server`
-
 ---
 
-## Langkah 2: Jalankan Server
+## Langkah 3: Jalankan Server
 
-### Windows (Command Prompt / PowerShell)
+### Cara 1: Pakai `start.bat` (paling mudah)
+
+1. Edit `start.bat` — ganti `PASSWORD` dengan password SQL Server Anda
+2. Double-click `start.bat`
+
+### Cara 2: Manual (Command Prompt / PowerShell)
 
 ```cmd
-set AUTHZ_DB_DRIVER=postgres
-set AUTHZ_DB_CONN=postgresql://postgres:PASSWORD@localhost:5432/authzdb
+set AUTHZ_DB_DRIVER=sqlserver
+set AUTHZ_DB_CONN=sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 set AUTHZ_ADDR=:8080
 set AUTHZ_AUTO_MIGRATE=true
 authz-server.exe
 ```
 
-### Windows (Git Bash)
+### Cara 3: Manual (Git Bash)
 
 ```bash
-export AUTHZ_DB_DRIVER=postgres
-export AUTHZ_DB_CONN='postgresql://postgres:PASSWORD@localhost:5432/authzdb'
+export AUTHZ_DB_DRIVER=sqlserver
+export AUTHZ_DB_CONN='sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
 export AUTHZ_ADDR=':8080'
 export AUTHZ_AUTO_MIGRATE='true'
 ./authz-server.exe
-```
-
-### Linux / Mac
-
-```bash
-export AUTHZ_DB_DRIVER=postgres
-export AUTHZ_DB_CONN='postgresql://postgres:PASSWORD@localhost:5432/authzdb'
-export AUTHZ_ADDR=':8080'
-export AUTHZ_AUTO_MIGRATE='true'
-./authz-server
 ```
 
 ### Verifikasi
@@ -106,12 +94,12 @@ Response:
 
 ---
 
-## Langkah 3: Buat API Key
+## Langkah 4: Buat API Key
 
 ```bash
 go run ./cmd/genkey \
-  -driver postgres \
-  -db "postgresql://postgres:PASSWORD@localhost:5432/authzdb" \
+  -driver sqlserver \
+  -db "sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true" \
   -name "client1" \
   -rpm 120
 ```
@@ -122,9 +110,11 @@ API key berhasil dibuat. SIMPAN SEKARANG — tidak akan ditampilkan lagi:
 ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
+> **PENTING**: Simpan API key — hanya ditampilkan sekali.
+
 ---
 
-## Langkah 4: Uji API
+## Langkah 5: Uji API
 
 ### Buat role
 ```bash
@@ -194,12 +184,21 @@ Jika ingin diakses dari internet (mis. dari HP atau komputer lain), gunakan tunn
 
 ```bat
 @echo off
+title authz-engine server
 cd /d %~dp0
-set AUTHZ_DB_DRIVER=postgres
-set AUTHZ_DB_CONN=postgresql://postgres:PASSWORD@localhost:5432/authzdb
+
+REM Database: SQL Server lokal
+set AUTHZ_DB_DRIVER=sqlserver
+set AUTHZ_DB_CONN=sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+
+REM HTTP server
 set AUTHZ_ADDR=:8080
+
+REM Auto migration saat startup
 set AUTHZ_AUTO_MIGRATE=true
+
 authz-server.exe
+pause
 ```
 
 ### `stop.bat` — Stop server
@@ -215,9 +214,19 @@ taskkill /f /im authz-server.exe
 
 ### Error: `connection refused` saat migration
 
-- Pastikan PostgreSQL sudah berjalan
-- Cek connection string benar (host, port, password)
-- Jika pakai Supabase, pastikan memilih **URI** (bukan Transaction/Pooler)
+- Pastikan SQL Server sudah berjalan (Service: `SQL Server (MSSQLSERVER)`)
+- Cek connection string benar (user, password, port 1433)
+- Pastikan database `authzdb` sudah dibuat
+
+### Error: `login failed for user 'sa'`
+
+- Pastikan password `sa` benar
+- Pastikan SQL Server menggunakan **SQL Server Authentication** (bukan Windows Auth)
+- Di SSMS: Properties → Security → pilih **SQL Server and Windows Authentication mode**
+
+### Error: `database "authzdb" does not exist`
+
+- Jalankan di SSMS: `CREATE DATABASE authzdb;`
 
 ### Port 8080 sudah dipakai
 
@@ -239,8 +248,7 @@ taskkill /f /im authz-server.exe
 ## Catatan Penting
 
 - **Self-host** = aplikasi berjalan selama PC/laptop menyala
-- **Database lokal** = data tersimpan di PC Anda
-- **Supabase** = data tersimpan di cloud (gratis 500MB)
+- **SQL Server** = data tersimpan di laptop Anda
 - **Tunnel** (ngrok/cloudflared) = akses dari internet tanpa port forwarding manual
 - **Auto-start** = aplikasi jalan otomatis saat Windows boot
 
