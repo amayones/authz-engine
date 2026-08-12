@@ -126,9 +126,6 @@ Jika Replit tidak otomatis menjalankan server, buat file `.replit` di root proye
 ```
 run = "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"
 
-[nix]
-channel = "stable-24_11"
-
 [deployment]
 run = ["sh", "-c", "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"]
 
@@ -144,11 +141,15 @@ Dan file `replit.nix`:
 ```nix
 { pkgs }: {
   deps = [
-    pkgs.go_1_26
+    pkgs.go
     pkgs.git
   ];
 }
 ```
+
+> **PENTING**: Gunakan `pkgs.go` (bukan `pkgs.go_1_26`). Versi `go_1_26` tidak tersedia di channel nixpkgs yang dipakai Replit (stable-25_05) dan akan menyebabkan error `couldn't get nix env`.
+>
+> Jangan tambahkan section `[nix] channel = ...` di `.replit` karena akan menimpa channel default Replit.
 
 Lalu klik **Run** lagi.
 
@@ -264,7 +265,7 @@ Ini **bukan error dari kode Anda** — ini masalah infrastruktur Replit. Build b
    - **Solusi**: Sudah diperbaiki — directive `tool` dihapus dan `go mod tidy` dijalankan. `go.mod` sekarang hanya 38 baris (sebelumnya 197 baris).
 
 2. **Versi Go tidak tersedia di Replit** — `go 1.26.5` di `go.mod` mungkin tidak tersedia persis di Replit.
-   - **Solusi**: `replit.nix` sekarang menggunakan `pkgs.go_1_26` yang lebih fleksibel.
+   - **Solusi**: `replit.nix` menggunakan `pkgs.go` (default) yang pasti tersedia di semua channel nixpkgs.
 
 3. **Koneksi internet Replit tidak stabil** — kadang build gagal karena jaringan.
    - **Solusi**: Klik **Run** lagi. Jika masih gagal, coba **Stop** lalu **Run** ulang, atau refresh halaman.
@@ -278,6 +279,33 @@ Ini **bukan error dari kode Anda** — ini masalah infrastruktur Replit. Build b
      Lalu klik **Run** lagi.
 
 5. **Replit sedang down** — cek status di https://status.replit.com
+
+### Error: `couldn't get nix env` / `evaluating file '<nix/derivation-internal.nix>'`
+
+Error ini terjadi karena **konfigurasi `replit.nix` atau `.replit` salah**. Penyebab umum:
+
+1. **`pkgs.go_1_26` tidak tersedia** di channel nixpkgs Replit (stable-25_05).
+   - **Solusi**: Gunakan `pkgs.go` (default) yang pasti tersedia di semua channel:
+     ```nix
+     { pkgs }: {
+       deps = [
+         pkgs.go
+         pkgs.git
+       ];
+     }
+     ```
+
+2. **Section `[nix] channel = ...` di `.replit`** menimpa channel default Replit dengan channel yang tidak tersedia.
+   - **Solusi**: Hapus section `[nix]` dari `.replit` dan biarkan Replit memakai channel default-nya.
+
+3. **Cache nix korup** di workspace Replit.
+   - **Solusi**: Di Replit, buka **Shell**, lalu jalankan:
+     ```bash
+     rm -rf ~/.nix-profile 2>/dev/null
+     ```
+     Lalu klik **Stop** dan **Run** ulang.
+
+4. Jika masih gagal, **buat Repl baru** (Import from GitHub) dengan repo yang sama — ini membersihkan semua cache lama.
 
 **Langkah yang harus dilakukan setelah perbaikan ini:**
 
