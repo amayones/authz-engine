@@ -1,0 +1,36 @@
+# Koyeb Blueprint — https://koyeb.com
+# Deploy dari GitHub. Koyeb memberi $5 kredit/ bulan yang di-refresh,
+# bukan trial — benar-benar gratis selamanya.
+#
+# Cara pakai:
+# 1. Login https://koyeb.com (GitHub/email, tanpa kartu kredit)
+# 2. Klik "Create App" → "GitHub" → pilih repo ini
+# 3. Koyeb otomatis build & deploy menggunakan konfigurasi ini
+# 4. Set Environment Variables di dashboard Koyeb
+#
+# Region: fra (Paris), na-east (New York), sin (Singapura) — pilih "sin"
+# agar dekat dengan Supabase region Singapore.
+
+name: authz-engine
+service:
+  name: authz-engine
+  type: web
+  instance_types:
+    - free
+  ports:
+    - port: 8080
+      protocol: http
+  health_checks:
+    - path: /health
+      port: 8080
+  envs:
+    - key: AUTHZ_DB_DRIVER
+      value: postgres
+    - key: AUTHZ_ADDR
+      value: ":8080"
+    - key: AUTHZ_AUTO_MIGRATE
+      value: "true"
+    # AUTHZ_DB_CONN diisi manual di dashboard (jangan di-commit ke repo)
+  routes:
+    - path: /
+      port: 8080

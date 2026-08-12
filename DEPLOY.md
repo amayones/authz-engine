@@ -1,12 +1,15 @@
-# Panduan Deployment Gratis — Railway + Supabase
+# Panduan Deployment Gratis Selamanya — Koyeb + Supabase
 
-Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) **gratis** menggunakan:
+Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) **gratis selamanya** (bukan trial) menggunakan:
 
 1. **Supabase** — database PostgreSQL gratis (500MB)
-2. **Railway** — hosting Go modern, simple, dan stabil
+2. **Koyeb** — hosting modern yang memberi $5 kredit/bulan **di-refresh terus-menerus** (bukan trial)
 
-> **Mengapa Railway bukan Replit/Render?**
-> Railway lebih modern dan simple untuk aplikasi Go: auto-detect `go.mod`, deploy dari GitHub dengan satu klik, HTTPS otomatis, dan tanpa konflik konfigurasi seperti Replit.
+> **Kok bukan Replit/Railway/Render?**
+> - Replit: idle & konflik konfigurasi (nix env)
+> - Railway: $5 hanya trial, kredit habis setelah trial berakhir
+> - Render: perlu kartu kredit untuk verifikasi
+> - **Koyeb**: $5 kredit/bulan di-refresh terus, tanpa kartu kredit — benar-benar gratis selamanya
 
 ---
 
@@ -15,93 +18,87 @@ Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) **gratis** men
 | Komponen | Platform | Gratis | Tanpa Kartu Kredit |
 |----------|----------|--------|-------------------|
 | Database PostgreSQL | [Supabase](https://supabase.com) | 500MB | ✅ |
-| Hosting App Go | [Railway](https://railway.app) | $5 kredit/bulan | ✅ (via GitHub) |
+| Hosting App Go | [Koyeb](https://koyeb.com) | $5/bulan (di-refresh) | ✅ (via GitHub) |
 
-> **Catatan biaya**: Railway memberi **$5 kredit gratis per bulan** tanpa kartu kredit. Satu service Go berjalan 24/7 dengan RAM 512MB kira-kira menghabiskan **$3-4/bulan** — cukup untuk 1 service ringan secara gratis terus-menerus.
+> **Koyeb Free tier**: `instance_types: free` — 1 service gratis, RAM 512MB, bandwidth 100GB/bulan. Kredit $5 di-refresh setiap bulan, jadi **tidak akan pernah habis** selama Anda stay di free tier.
 
 ---
 
 ## Langkah 1: Persiapkan Proyek di GitHub
 
-Push proyek ke GitHub:
-
 ```bash
 cd c:\Apache2462\htdocs\authz-engine
 git add .
-git commit -m "tambah konfigurasi Railway + optimasi Docker"
+git commit -m "tambah konfigurasi Koyeb + Supabase"
 git push origin main
 ```
-
-> Jika repo belum ada, buat di https://github.com/new lalu hubungkan.
 
 ---
 
 ## Langkah 2: Buat Database PostgreSQL di Supabase
 
 1. Buka https://supabase.com → **Start your project** (login GitHub/email)
-2. Klik **New project**:
+2. **New project**:
    - **Name**: `authz-engine`
-   - **Database Password**: buat password kuat, simpan
+   - **Password**: buat password kuat, simpan
    - **Region**: **Southeast Asia (Singapore)**
-3. Setelah dibuat (±2 menit), buka **Settings → Database → Connection string**
-4. Pilih **URI**, salin — formatnya:
+3. Setelah jadi (±2 menit), buka **Settings → Database → Connection string**
+4. Pilih **URI**, salin:
    ```
    postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
    ```
 
 ---
 
-## Langkah 3: Deploy ke Railway
+## Langkah 3: Deploy ke Koyeb
 
-### 3.1 Daftar Railway
+### 3.1 Daftar Koyeb
 
-1. Buka https://railway.app
-2. Klik **Sign up** → **Continue with GitHub**
-3. Grant akses GitHub yang diminta (bukan kartu kredit)
+1. Buka https://koyeb.com
+2. Klik **Sign up** → **Continue with GitHub** (bukan kartu kredit)
+3. Koyeb otomatis memberikan $5 kredit/bulan yang **di-refresh terus**
 
-### 3.2 Buat Project dari Repository
+### 3.2 Create App dari GitHub
 
-1. Klik **New Project**
-2. Pilih **Deploy from GitHub repo**
-3. Pilih repo `amayones/authz-engine`
-4. Railway otomatis mendeteksi Go dan men-deploy
+1. Klik **Create App**
+2. Pilih tab **GitHub**, hubungkan repo `amayones/authz-engine`
+3. Koyeb otomatis mendeteksi **Dockerfile** di repo
+4. Atur:
+   - **Region**: pilih **Singapore (sin)** — dekat Supabase region Singapore
+   - **Instance Type**: `Free` (sudah default dari `koyeb.yaml`)
+   - **Service Type**: `Web Service` (default)
+   - **Port**: `8080` (sudah dari `koyeb.yaml`)
+5. Klik **Deploy**
 
-> Konfigurasi (`railway.toml`) sudah ada di repo, jadi Railway otomatis tahu:
-> - Build: `go build -o authz-server ./cmd/server`
-> - Start: `./authz-server`
+> Konfigurasi `koyeb.yaml` sudah ada di repo, jadi Koyeb otomatis paham:
+> - Port: `8080`
 > - Healthcheck: `/health`
+> - Env vars: `AUTHZ_DB_DRIVER`, `AUTHZ_ADDR`, `AUTHZ_AUTO_MIGRATE`
 
-### 3.3 Set Environment Variables (Variables)
+### 3.3 Set Environment Variables
 
-1. Di dashboard project Railway, klik service `authz-engine`
-2. Buka tab **Variables**
-3. Tambahkan:
-
-   | Key | Value |
-   |-----|-------|
-   | `AUTHZ_DB_DRIVER` | `postgres` |
-   | `AUTHZ_DB_CONN` | *(connection string Supabase dari Langkah 2)* |
-   | `AUTHZ_ADDR` | `:8080` |
-   | `AUTHZ_AUTO_MIGRATE` | `true` |
-
-4. Railway akan otomatis redeploy dengan env baru
+1. Setelah deploy pertama sukses, buka service → tab **Environment Variables**
+2. Tambahkan `AUTHZ_DB_CONN`:
+   ```
+   key:   AUTHZ_DB_CONN
+   value: postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+   ```
+3. Klik **Redeploy**
 
 ### 3.4 Dapatkan URL
 
-1. Buka tab **Settings** pada service
-2. Bagian **Networking** → **Generate Domain** → klik tombol generate
-3. Railway membuat URL seperti: `https://authz-engine-production.up.railway.app`
+Koyeb otomatis memberi URL:
+```
+https://authz-engine-<nama>.koyeb.app
+```
 
 ### 3.5 Verifikasi
 
-Buka di browser:
-
-```
-https://authz-engine-production.up.railway.app/health
+```bash
+curl https://authz-engine-<nama>.koyeb.app/health
 ```
 
 Response:
-
 ```json
 {"status":"ok"}
 ```
@@ -121,7 +118,6 @@ go run ./cmd/genkey \
 ```
 
 Output:
-
 ```
 API key berhasil dibuat. SIMPAN SEKARANG — tidak akan ditampilkan lagi:
 ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
@@ -134,37 +130,30 @@ ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ## Langkah 5: Uji API
 
 ### 5.1 Buat role
-
 ```bash
-curl -X POST https://authz-engine-production.up.railway.app/roles \
+curl -X POST https://authz-engine-<nama>.koyeb.app/roles \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "editor",
-    "permissions": ["invoice:read", "invoice:write"]
-  }'
+  -d '{"name": "editor", "permissions": ["invoice:read", "invoice:write"]}'
 ```
 
-### 5.2 Assign role ke user
-
+### 5.2 Assign role
 ```bash
-curl -X POST https://authz-engine-production.up.railway.app/roles/assign \
+curl -X POST https://authz-engine-<nama>.koyeb.app/roles/assign \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "role_name": "editor"}'
 ```
 
-### 5.3 Cek izin (Can)
-
+### 5.3 Cek izin
 ```bash
-curl -X POST https://authz-engine-production.up.railway.app/can \
+curl -X POST https://authz-engine-<nama>.koyeb.app/can \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "resource": "invoice", "action": "read"}'
 ```
 
 Response:
-
 ```json
 {"allowed":true}
 ```
@@ -173,8 +162,7 @@ Response:
 
 ## Deploy Ulang Otomatis
 
-Railway otomatis **redeploy** setiap kali ada push ke `main` di GitHub.
-Tidak perlu melakukan apa-apa — cukup push:
+Koyeb otomatis **redeploy** setiap push ke branch `main` di GitHub.
 
 ```bash
 git push origin main
@@ -182,72 +170,44 @@ git push origin main
 
 ---
 
-## Deployment via Dockerfile (opsional)
-
-Jika ingin memakai Dockerfile (bukan Nixpacks), ubah di `railway.toml`:
-
-```toml
-[build]
-builder = "DOCKERFILE"
-```
-
-Dockerfile sudah dioptimasi:
-
-- Build stage menggunakan `golang:1.26-alpine` (ringan)
-- Runtime stage hanya `alpine:3.20` (image sangat kecil ~15MB)
-- Migrations disertakan di image
-
----
-
 ## Troubleshooting
 
 ### Error: `connection refused` saat migration
 
-- Pastikan connection string Supabase benar
-- Jika password mengandung `@` atau `:`, gunakan **URL-encoding** (mis. `%40` untuk `@`, `%3A` untuk `:`)
-- Pastikan memilih **URI** (bukan Transaction/Pooler)
-
-### Error: `role "postgres" does not exist`
-
-- Di Supabase, gunakan **URI** (bukan Transaction pooler)
+- Cek `AUTHZ_DB_CONN` sudah benar di Environment Variables
+- Jika password mengandung `@`/`:`, gunakan URL-encoding (`%40`, `%3A`)
+- Gunakan **URI** (bukan Transaction/Pooler) di Supabase
 
 ### App tidak bisa diakses
 
-1. Cek tab **Deployments** di Railway — apakah deployment sukses?
-2. Cek tab **Logs** untuk error
-3. Pastikan `AUTHZ_ADDR=:8080` dan **Generate Domain** sudah dilakukan
-4. Pastikan healthcheck `/health` merespons
+1. Cek tab **Logs** di dashboard Koyeb
+2. Pastikan **Port 8080** sudah benar di service config
+3. Pastikan `AUTHZ_ADDR=:8080` di env vars
+4. Cek healthcheck `/health` di browser
 
-### Migration gagal muncul di log
+### Migration gagal di log
 
-- Pastikan `AUTHZ_AUTO_MIGRATE=true` di Variables
-- Pastikan `AUTHZ_DB_CONN` benar dan dapat diakses dari Railway (Supabase memungkinkan koneksi dari cloud)
-
-### Kredit $5 habis
-
-- Railway memberi $5 kredit/bulan. Satu service Go 512MB memakan ±$3-4/bulan
-- Jika habis, cukup tunggu bulan berikutnya, atau upgrade kapan saja
+- Pastikan `AUTHZ_AUTO_MIGRATE=true` sudah di-set
+- Pastikan `AUTHZ_DB_DRIVER=postgres` (bukan sqlserver)
 
 ---
 
 ## Catatan Penting
 
-- **Supabase** gratis 500MB — cukup untuk aplikasi kecil
-- **Railway** memberi $5 kredit gratis/bulan — cukup untuk 1 service Go ringan
-- **Migration otomatis** berjalan saat app start (`AUTHZ_AUTO_MIGRATE=true`)
-- **Auto-deploy** dari GitHub setiap push ke `main`
-- **HTTPS otomatis** via Generate Domain di Railway
-- **Tidak ada downtime idle** seperti Replit — Railway berjalan 24/7
+- **Koyeb Free tier** — kredit $5/bulan di-refresh terus, bukan trial
+- **Supabase** gratis 500MB
+- **Tidak ada downtime idle** seperti Replit — Koyeb berjalan 24/7
+- **Auto-deploy** dari GitHub
+- **HTTPS otomatis** via `*.koyeb.app`
 
 ---
 
-## Alternatif Lain (Jika Railway Tidak Cocok)
+## Alternatif Lain (Juga Gratis Selamanya)
 
-| Kombinasi | Database | App | Catatan |
-|-----------|----------|-----|---------|
-| Supabase + **Fly.io** | [Supabase](https://supabase.com) | [Fly.io](https://fly.io) | Perlu kartu kredit untuk verifikasi |
-| Supabase + **Render** | [Supabase](https://supabase.com) | [Render](https://render.com) | Perlu kartu kredit untuk verifikasi |
-| Supabase + **Replit** | [Supabase](https://supabase.com) | [Replit](https://replit.com) | Gratis, tapi idle & konflik konfigurasi |
-| Supabase + **Railway** | [Supabase](https://supabase.com) | [Railway](https://railway.app) | **Terbaik untuk Go + Supabase** |
-
-> **Rekomendasi**: Untuk aplikasi Go + Supabase, **Railway** adalah pilihan paling modern, simple, dan stabil — tanpa kartu kredit, auto-deploy, HTTPS otomatis, dan tanpa downtime idle.
+| Kombinasi | Database | App | Gratis Selamanya | Catatan |
+|-----------|----------|-----|-------------------|---------|
+| Supabase + **Koyeb** | [Supabase](https://supabase.com) | [Koyeb](https://koyeb.com) | ✅ $5/bulan refresh | **Rekomendasi terbaik** |
+| Supabase + **Fly.io** | [Supabase](https://supabase.com) | [Fly.io](https://fly.io) | ✅ (2-3 VM gratis) | Perlu kartu kredit verifikasi |
+| Supabase + **Replit** | [Supabase](https://supabase.com) | [Replit](https://replit.com) | ✅ | Idle & konflik nix |
+| Supabase + **Render** | [Supabase](https://supabase.com) | [Render](https://render.com) | ⚠️ Perlu kartu | Verifikasi kartu kredit |
+| Supabase + **Railway** | [Supabase](https://supabase.com) | [Railway](https://railway.app) | ⚠️ Trial habis | $5 trial sekali |
