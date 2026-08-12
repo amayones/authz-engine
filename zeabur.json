@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.zeabur.app/template.json",
+  "name": "authz-engine",
+  "services": [
+    {
+      "name": "authz-engine",
+      "source": {
+        "type": "github",
+        "repo": "amayones/authz-engine"
+      },
+      "build": {
+        "type": "dockerfile"
+      },
+      "ports": [8080]
+    }
+  ]
+}
