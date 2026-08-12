@@ -7,32 +7,46 @@ import (
 	"log"
 
 	"github.com/amayones/authz-engine/internal/api"
+	"github.com/amayones/authz-engine/internal/migrate"
 	"github.com/amayones/authz-engine/internal/model"
+	"github.com/amayones/authz-engine/internal/store"
 	"github.com/amayones/authz-engine/internal/store/mssql"
+	"github.com/amayones/authz-engine/internal/store/postgres"
 )
 
 func main() {
-	connString := flag.String("db", "", "SQL Server connection string")
+	connString := flag.String("db", "", "Database connection string")
 	clientName := flag.String("name", "", "Nama client (misal: 'billing-service')")
 	rpm := flag.Int("rpm", 60, "Rate limit request per menit")
+	driver := flag.String("driver", "sqlserver", "Database driver: 'sqlserver' atau 'postgres'")
 	flag.Parse()
 
 	if *connString == "" || *clientName == "" {
 		log.Fatal("wajib isi -db dan -name")
 	}
 
-	// Ini butuh export fungsi generateAPIKey & hashAPIKey dari package api
-	// -- lihat catatan di bawah.
 	rawKey, hash, err := api.GenerateAndHashKey()
 	if err != nil {
 		log.Fatalf("gagal generate key: %v", err)
 	}
 
-	s, err := mssql.New(*connString)
-	if err != nil {
-		log.Fatalf("gagal konek database: %v", err)
+	var s store.Store
+	switch migrate.Driver(*driver) {
+	case migrate.DriverPostgres:
+		pg, err := postgres.New(*connString)
+		if err != nil {
+			log.Fatalf("gagal konek database postgres: %v", err)
+		}
+		defer pg.Close()
+		s = pg
+	default:
+		ms, err := mssql.New(*connString)
+		if err != nil {
+			log.Fatalf("gagal konek database sqlserver: %v", err)
+		}
+		defer ms.Close()
+		s = ms
 	}
-	defer s.Close()
 
 	err = s.CreateAPIKey(context.Background(), hash, model.APIKey{
 		ClientName:   *clientName,
