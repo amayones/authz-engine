@@ -1,0 +1,30 @@
+# Render Blueprint — https://render.com
+# Deploy aplikasi Go di Render, database pakai Supabase (gratis).
+#
+# Cara pakai:
+# 1. Login https://render.com (perlu kartu kredit untuk verifikasi, tapi gratis)
+# 2. Klik "New +" → "Blueprint" → pilih repo ini
+# 3. Render otomatis membuat service dari file ini
+#
+# Catatan: Database TIDAK dibuat di Render (mahal) — pakai Supabase gratis.
+# Set AUTHZ_DB_CONN di dashboard Render saat pertama deploy.
+
+services:
+  - type: web
+    name: authz-engine
+    runtime: go
+    repo: https://github.com/amayones/authz-engine
+    plan: free
+    autoDeploy: true
+    buildCommand: go build -o authz-server ./cmd/server
+    startCommand: ./authz-server
+    healthCheckPath: /health
+    envVars:
+      - key: AUTHZ_DB_DRIVER
+        value: postgres
+      - key: AUTHZ_ADDR
+        value: :10000
+      - key: AUTHZ_AUTO_MIGRATE
+        value: "true"
+      - key: AUTHZ_DB_CONN
+        sync: false # diisi manual lewat dashboard, jangan commit di repo

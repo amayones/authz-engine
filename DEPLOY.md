@@ -1,25 +1,23 @@
-# Panduan Deployment Gratis — Zeabur + Supabase
+# Panduan Deployment — Render (App) + Supabase (Database)
 
-Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) **gratis** menggunakan:
+Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) menggunakan:
 
-1. **Supabase** — database PostgreSQL gratis (500MB)
-2. **Zeabur** — platform hosting modern dari Asia, mendukung Go native, free tier
+1. **Render** — hosting aplikasi Go (free tier, 750 jam/bulan)
+2. **Supabase** — database PostgreSQL gratis (500MB)
 
-> **Mengapa Zeabur?**
-> - **Region dekat**: Hong Kong / Tokyo — sangat dekat dengan Supabase region Singapore (latency rendah)
-> - **Go native**: auto-detect `go.mod`, build & deploy otomatis
-> - **Free tier**: 1 service gratis, tanpa kartu kredit
-> - **Modern & simple**: deploy dari GitHub dengan satu klik, auto HTTPS
-> - **Tanpa konflik konfigurasi** seperti Replit
+> **Kenapa database pakai Supabase, bukan Render?**
+> Database PostgreSQL di Render **berbayar** (mulai $7/bulan). Supabase memberi **500MB gratis** — jauh lebih hemat. Jadi: **Render untuk deploy app, Supabase untuk database**.
 
 ---
 
 ## Ringkasan
 
-| Komponen | Platform | Gratis | Tanpa Kartu Kredit |
-|----------|----------|--------|-------------------|
-| Database PostgreSQL | [Supabase](https://supabase.com) | 500MB | ✅ |
-| Hosting App Go | [Zeabur](https://zeabur.com) | Free tier | ✅ (via GitHub) |
+| Komponen | Platform | Biaya | Kartu Kredit |
+|----------|----------|-------|--------------|
+| Hosting App Go | [Render](https://render.com) | Free tier (750 jam/bulan) | ✅ Perlu untuk verifikasi |
+| Database PostgreSQL | [Supabase](https://supabase.com) | Gratis 500MB | ✅ Tidak |
+
+> **Catatan**: Render memerlukan **kartu kredit untuk verifikasi** saat daftar, tapi **tidak akan ditagih** selama Anda stay di free tier. Ini syarat umum platform cloud modern.
 
 ---
 
@@ -28,7 +26,7 @@ Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) **gratis** men
 ```bash
 cd c:\Apache2462\htdocs\authz-engine
 git add .
-git commit -m "tambah konfigurasi Zeabur + Supabase"
+git commit -m "tambah konfigurasi Render + Supabase"
 git push origin main
 ```
 
@@ -49,53 +47,54 @@ git push origin main
 
 ---
 
-## Langkah 3: Deploy ke Zeabur
+## Langkah 3: Deploy ke Render
 
-### 3.1 Daftar Zeabur
+### 3.1 Daftar Render
 
-1. Buka https://zeabur.com
-2. Klik **Sign up** → **Continue with GitHub** (bukan kartu kredit)
-3. Zeabur otomatis memberi free tier
+1. Buka https://render.com
+2. Klik **Sign up** → **Continue with GitHub**
+3. Verifikasi kartu kredit (tidak akan ditagih di free tier)
 
-### 3.2 Create Project & Deploy
+### 3.2 Deploy via Blueprint
 
-1. Klik **Create Project** → beri nama (mis. `authz-engine`)
-2. Klik **Deploy Service** → pilih **GitHub**
-3. Hubungkan repo `amayones/authz-engine`
-4. Zeabur otomatis mendeteksi **Dockerfile** di repo dan build
-5. Setelah build selesai, klik **Generate Domain** untuk dapat URL:
-   ```
-   https://authz-engine-xxxx.zeabur.app
-   ```
-
-> Konfigurasi `zeabur.json` sudah ada di repo, jadi Zeabur otomatis paham:
-> - Build: `dockerfile`
-> - Port: `8080`
+1. Klik **New +** → **Blueprint**
+2. Pilih repo `amayones/authz-engine`
+3. Render otomatis membaca `render.yaml` dan membuat service:
+   - **Runtime**: Go
+   - **Build**: `go build -o authz-server ./cmd/server`
+   - **Start**: `./authz-server`
+   - **Healthcheck**: `/health`
+   - **Plan**: Free
 
 ### 3.3 Set Environment Variables
 
-1. Di dashboard service, buka tab **Variables**
-2. Tambahkan:
+1. Di dashboard service, buka tab **Environment**
+2. Tambahkan `AUTHZ_DB_CONN`:
+   ```
+   key:   AUTHZ_DB_CONN
+   value: postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+   ```
+3. Render otomatis redeploy
 
-   | Key | Value |
-   |-----|-------|
-   | `AUTHZ_DB_DRIVER` | `postgres` |
-   | `AUTHZ_DB_CONN` | *(connection string Supabase dari Langkah 2)* |
-   | `AUTHZ_ADDR` | `:8080` |
-   | `AUTHZ_AUTO_MIGRATE` | `true` |
+### 3.4 Dapatkan URL
 
-3. Zeabur otomatis redeploy dengan env baru
+Render otomatis memberi URL:
+```
+https://authz-engine.onrender.com
+```
 
-### 3.4 Verifikasi
+### 3.5 Verifikasi
 
 ```bash
-curl https://authz-engine-xxxx.zeabur.app/health
+curl https://authz-engine.onrender.com/health
 ```
 
 Response:
 ```json
 {"status":"ok"}
 ```
+
+> **Catatan**: Render free tier akan **sleep** setelah 15 menit tidak aktif. Saat diakses lagi, akan restart otomatis (butuh ±30 detik pertama kali).
 
 ---
 
@@ -125,7 +124,7 @@ ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 
 ### 5.1 Buat role
 ```bash
-curl -X POST https://authz-engine-xxxx.zeabur.app/roles \
+curl -X POST https://authz-engine.onrender.com/roles \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"name": "editor", "permissions": ["invoice:read", "invoice:write"]}'
@@ -133,7 +132,7 @@ curl -X POST https://authz-engine-xxxx.zeabur.app/roles \
 
 ### 5.2 Assign role
 ```bash
-curl -X POST https://authz-engine-xxxx.zeabur.app/roles/assign \
+curl -X POST https://authz-engine.onrender.com/roles/assign \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "role_name": "editor"}'
@@ -141,7 +140,7 @@ curl -X POST https://authz-engine-xxxx.zeabur.app/roles/assign \
 
 ### 5.3 Cek izin
 ```bash
-curl -X POST https://authz-engine-xxxx.zeabur.app/can \
+curl -X POST https://authz-engine.onrender.com/can \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "resource": "invoice", "action": "read"}'
@@ -156,7 +155,7 @@ Response:
 
 ## Deploy Ulang Otomatis
 
-Zeabur otomatis **redeploy** setiap push ke branch `main` di GitHub.
+Render otomatis **redeploy** setiap push ke branch `main` di GitHub.
 
 ```bash
 git push origin main
@@ -168,15 +167,15 @@ git push origin main
 
 ### Error: `connection refused` saat migration
 
-- Cek `AUTHZ_DB_CONN` sudah benar di Variables
+- Cek `AUTHZ_DB_CONN` sudah benar di Environment
 - Jika password mengandung `@`/`:`, gunakan URL-encoding (`%40`, `%3A`)
 - Gunakan **URI** (bukan Transaction/Pooler) di Supabase
 
 ### App tidak bisa diakses
 
-1. Cek tab **Logs** di dashboard Zeabur
-2. Pastikan **Port 8080** sudah benar (dari `zeabur.json`)
-3. Pastikan `AUTHZ_ADDR=:8080` di env vars
+1. Cek tab **Logs** di dashboard Render
+2. Pastikan **Port 10000** sudah benar (Render free tier pakai port 10000)
+3. Pastikan `AUTHZ_ADDR=:10000` di env vars
 4. Cek healthcheck `/health` di browser
 
 ### Migration gagal di log
@@ -184,24 +183,29 @@ git push origin main
 - Pastikan `AUTHZ_AUTO_MIGRATE=true` sudah di-set
 - Pastikan `AUTHZ_DB_DRIVER=postgres` (bukan sqlserver)
 
+### App sleep (idle)
+
+- Render free tier sleep setelah 15 menit tidak aktif
+- Saat diakses lagi, restart otomatis (±30 detik)
+- Ini normal untuk free tier
+
 ---
 
 ## Catatan Penting
 
-- **Zeabur Free tier** — 1 service gratis, tanpa kartu kredit
+- **Render free tier** — 750 jam/bulan, sleep saat idle
 - **Supabase** gratis 500MB
-- **Region dekat**: Zeabur Hong Kong/Tokyo + Supabase Singapore = latency rendah
+- **Database TIDAK dibuat di Render** (mahal) — pakai Supabase
 - **Auto-deploy** dari GitHub
-- **HTTPS otomatis** via `*.zeabur.app`
+- **HTTPS otomatis** via `*.onrender.com`
 
 ---
 
-## Alternatif Lain (Juga Gratis)
+## Alternatif Lain
 
-| Kombinasi | Database | App | Gratis | Catatan |
-|-----------|----------|-----|--------|---------|
-| Supabase + **Zeabur** | [Supabase](https://supabase.com) | [Zeabur](https://zeabur.com) | ✅ Free tier | **Rekomendasi terbaik** (region dekat) |
-| Supabase + **Koyeb** | [Supabase](https://supabase.com) | [Koyeb](https://koyeb.com) | ✅ $5/bulan refresh | Region jauh (Paris/NY) |
-| Supabase + **Fly.io** | [Supabase](https://supabase.com) | [Fly.io](https://fly.io) | ✅ (2-3 VM gratis) | Perlu kartu kredit verifikasi |
-| Supabase + **Replit** | [Supabase](https://supabase.com) | [Replit](https://replit.com) | ✅ | Idle & konflik nix |
-| Supabase + **Railway** | [Supabase](https://supabase.com) | [Railway](https://railway.app) | ⚠️ Trial habis | $5 trial sekali |
+| Kombinasi | Database | App | Catatan |
+|-----------|----------|-----|---------|
+| Supabase + **Render** | [Supabase](https://supabase.com) | [Render](https://render.com) | **Pilihan Anda** — stabil, perlu kartu verifikasi |
+| Supabase + **Zeabur** | [Supabase](https://supabase.com) | [Zeabur](https://zeabur.com) | Region Asia, tanpa kartu |
+| Supabase + **Koyeb** | [Supabase](https://supabase.com) | [Koyeb](https://koyeb.com) | $5/bulan refresh |
+| Supabase + **Fly.io** | [Supabase](https://supabase.com) | [Fly.io](https://fly.io) | Perlu kartu verifikasi |
