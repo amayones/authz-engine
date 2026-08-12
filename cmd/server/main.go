@@ -13,7 +13,6 @@ import (
 	"github.com/amayones/authz-engine/internal/model"
 	"github.com/amayones/authz-engine/internal/store"
 	"github.com/amayones/authz-engine/internal/store/mssql"
-	"github.com/amayones/authz-engine/internal/store/postgres"
 )
 
 func main() {
@@ -33,22 +32,12 @@ func main() {
 	}
 
 	var st store.Store
-	switch migrate.Driver(driver) {
-	case migrate.DriverPostgres:
-		pg, err := postgres.New(connString)
-		if err != nil {
-			log.Fatalf("gagal konek database postgres: %v", err)
-		}
-		defer pg.Close()
-		st = pg
-	default:
-		ms, err := mssql.New(connString)
-		if err != nil {
-			log.Fatalf("gagal konek database sqlserver: %v", err)
-		}
-		defer ms.Close()
-		st = ms
+	ms, err := mssql.New(connString)
+	if err != nil {
+		log.Fatalf("gagal konek database sqlserver: %v", err)
 	}
+	defer ms.Close()
+	st = ms
 
 	e := engine.NewWithCache(st, 15*time.Second)
 	e.SetSchema(model.RelationSchema{

@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=build /app/authz-server /app/authz-server
 COPY --from=build /app/migrations /app/migrations
 
-ENV AUTHZ_DB_DRIVER=postgres
+ENV AUTHZ_DB_DRIVER=sqlserver
 ENV AUTHZ_ADDR=:8080
 ENV AUTHZ_AUTO_MIGRATE=true
 

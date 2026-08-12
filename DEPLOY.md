@@ -24,21 +24,13 @@ Buka **SQL Server Management Studio (SSMS)** atau **Azure Data Studio**, lalu ja
 CREATE DATABASE authzdb;
 ```
 
-### 1.2 Cek Connection String
-
-Format connection string SQL Server:
+### 1.2 Connection String
 
 ```
-sqlserver://USER:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 ```
 
-Contoh dengan user `sa`:
-
-```
-sqlserver://sa:password123@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
-```
-
-> **PENTING**: Ganti `sa:password123` dengan user & password SQL Server Anda.
+> **User**: `may` | **Password**: `may`
 
 ---
 
@@ -58,14 +50,13 @@ go build -o authz-genkey.exe ./cmd/genkey
 
 ### Cara 1: Pakai `start.bat` (paling mudah)
 
-1. Edit `start.bat` — ganti `PASSWORD` dengan password SQL Server Anda
-2. Double-click `start.bat`
+1. Double-click `start.bat` (sudah dikonfigurasi dengan user `may` / password `may`)
 
 ### Cara 2: Manual (Command Prompt / PowerShell)
 
 ```cmd
 set AUTHZ_DB_DRIVER=sqlserver
-set AUTHZ_DB_CONN=sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+set AUTHZ_DB_CONN=sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 set AUTHZ_ADDR=:8080
 set AUTHZ_AUTO_MIGRATE=true
 authz-server.exe
@@ -75,7 +66,7 @@ authz-server.exe
 
 ```bash
 export AUTHZ_DB_DRIVER=sqlserver
-export AUTHZ_DB_CONN='sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
+export AUTHZ_DB_CONN='sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true'
 export AUTHZ_ADDR=':8080'
 export AUTHZ_AUTO_MIGRATE='true'
 ./authz-server.exe
@@ -98,8 +89,7 @@ Response:
 
 ```bash
 go run ./cmd/genkey \
-  -driver sqlserver \
-  -db "sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true" \
+  -db "sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true" \
   -name "client1" \
   -rpm 120
 ```
@@ -189,7 +179,7 @@ cd /d %~dp0
 
 REM Database: SQL Server lokal
 set AUTHZ_DB_DRIVER=sqlserver
-set AUTHZ_DB_CONN=sqlserver://sa:PASSWORD@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+set AUTHZ_DB_CONN=sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
 
 REM HTTP server
 set AUTHZ_ADDR=:8080
@@ -215,12 +205,12 @@ taskkill /f /im authz-server.exe
 ### Error: `connection refused` saat migration
 
 - Pastikan SQL Server sudah berjalan (Service: `SQL Server (MSSQLSERVER)`)
-- Cek connection string benar (user, password, port 1433)
+- Cek connection string benar (user `may`, password `may`, port 1433)
 - Pastikan database `authzdb` sudah dibuat
 
-### Error: `login failed for user 'sa'`
+### Error: `login failed for user 'may'`
 
-- Pastikan password `sa` benar
+- Pastikan password `may` benar
 - Pastikan SQL Server menggunakan **SQL Server Authentication** (bukan Windows Auth)
 - Di SSMS: Properties → Security → pilih **SQL Server and Windows Authentication mode**
 
@@ -256,10 +246,12 @@ taskkill /f /im authz-server.exe
 
 ## File yang Tidak Diperlukan (Sudah Dihapus)
 
-File konfigurasi cloud yang sudah tidak diperlukan untuk self-hosting:
+File konfigurasi cloud dan PostgreSQL yang sudah tidak diperlukan:
 
 | File | Keterangan |
 |------|------------|
+| `internal/store/postgres/` | Store PostgreSQL — dihapus |
+| `migrations/postgres/` | Migration PostgreSQL — dihapus |
 | `render.yaml` | Konfigurasi Render (cloud) — dihapus |
 | `zeabur.json` | Konfigurasi Zeabur (cloud) — dihapus |
 | `koyeb.yaml` | Konfigurasi Koyeb (cloud) — dihapus |
