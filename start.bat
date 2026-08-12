@@ -8,9 +8,21 @@ REM  Database: SQL Server (lokal)
 REM  User: may  Password: may
 REM ============================================
 
+REM Build dulu jika belum ada
+if not exist authz-server.exe (
+    echo Building authz-server.exe...
+    go build -o authz-server.exe ./cmd/server
+    if errorlevel 1 (
+        echo Build gagal!
+        pause
+        exit /b 1
+    )
+)
+
 REM Database: SQL Server lokal
+REM Catatan: ^& digunakan untuk escape karakter & di batch file
 set AUTHZ_DB_DRIVER=sqlserver
-set AUTHZ_DB_CONN=sqlserver://may:may@localhost:1433?database=authzdb&encrypt=true&trustservercertificate=true
+set AUTHZ_DB_CONN=sqlserver://may:may@localhost:1433?database=authzdb^&encrypt=true^&trustservercertificate=true
 
 REM HTTP server
 set AUTHZ_ADDR=:8080
