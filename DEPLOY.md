@@ -1,92 +1,102 @@
-# Panduan Deployment — Render (App) + Supabase (Database)
+# Panduan Self-Hosting — Jalankan dari PC/Laptop
 
-Panduan ini menjelaskan cara hosting `authz-engine` (aplikasi Go) menggunakan:
-
-1. **Render** — hosting aplikasi Go (free tier, 750 jam/bulan)
-2. **Supabase** — database PostgreSQL gratis (500MB)
-
-> **Kenapa database pakai Supabase, bukan Render?**
-> Database PostgreSQL di Render **berbayar** (mulai $7/bulan). Supabase memberi **500MB gratis** — jauh lebih hemat. Jadi: **Render untuk deploy app, Supabase untuk database**.
+Panduan ini menjelaskan cara menjalankan `authz-engine` **langsung dari PC/laptop Anda** (self-host), tanpa perlu layanan cloud berbayar.
 
 ---
 
 ## Ringkasan
 
-| Komponen | Platform | Biaya | Kartu Kredit |
-|----------|----------|-------|--------------|
-| Hosting App Go | [Render](https://render.com) | Free tier (750 jam/bulan) | ✅ Perlu untuk verifikasi |
-| Database PostgreSQL | [Supabase](https://supabase.com) | Gratis 500MB | ✅ Tidak |
-
-> **Catatan**: Render memerlukan **kartu kredit untuk verifikasi** saat daftar, tapi **tidak akan ditagih** selama Anda stay di free tier. Ini syarat umum platform cloud modern.
+| Komponen | Cara |
+|----------|------|
+| Aplikasi Go | Jalankan langsung dari PC/laptop (Windows/Linux/Mac) |
+| Database | PostgreSQL lokal (gratis) atau Supabase (gratis 500MB) |
+| Akses dari luar | Port forwarding / tunnel (ngrok, cloudflared) |
 
 ---
 
-## Langkah 1: Persiapkan Proyek di GitHub
+## Opsi Database
 
-```bash
-cd c:\Apache2462\htdocs\authz-engine
-git add .
-git commit -m "tambah konfigurasi Render + Supabase"
-git push origin main
+### Opsi A: PostgreSQL Lokal (paling sederhana)
+
+Install PostgreSQL di PC Anda:
+
+1. Download: https://www.postgresql.org/download/
+2. Install dengan default settings
+3. Buat database:
+   ```sql
+   CREATE DATABASE authzdb;
+   ```
+
+Connection string:
+```
+postgresql://postgres:YOUR_PASSWORD@localhost:5432/authzdb
 ```
 
----
+### Opsi B: Supabase (gratis, tanpa install)
 
-## Langkah 2: Buat Database PostgreSQL di Supabase
-
-1. Buka https://supabase.com → **Start your project** (login GitHub/email)
+1. Buka https://supabase.com → **Start your project**
 2. **New project**:
    - **Name**: `authz-engine`
-   - **Password**: buat password kuat, simpan
+   - **Password**: buat password kuat
    - **Region**: **Southeast Asia (Singapore)**
-3. Setelah jadi (±2 menit), buka **Settings → Database → Connection string**
-4. Pilih **URI**, salin:
+3. **Settings → Database → Connection string** → pilih **URI**
+4. Salin connection string:
    ```
    postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
    ```
 
 ---
 
-## Langkah 3: Deploy ke Render
+## Langkah 1: Build Aplikasi
 
-### 3.1 Daftar Render
-
-1. Buka https://render.com
-2. Klik **Sign up** → **Continue with GitHub**
-3. Verifikasi kartu kredit (tidak akan ditagih di free tier)
-
-### 3.2 Deploy via Blueprint
-
-1. Klik **New +** → **Blueprint**
-2. Pilih repo `amayones/authz-engine`
-3. Render otomatis membaca `render.yaml` dan membuat service:
-   - **Runtime**: Go
-   - **Build**: `go build -o authz-server ./cmd/server`
-   - **Start**: `./authz-server`
-   - **Healthcheck**: `/health`
-   - **Plan**: Free
-
-### 3.3 Set Environment Variables
-
-1. Di dashboard service, buka tab **Environment**
-2. Tambahkan `AUTHZ_DB_CONN`:
-   ```
-   key:   AUTHZ_DB_CONN
-   value: postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
-   ```
-3. Render otomatis redeploy
-
-### 3.4 Dapatkan URL
-
-Render otomatis memberi URL:
-```
-https://authz-engine.onrender.com
-```
-
-### 3.5 Verifikasi
+Buka terminal di folder proyek:
 
 ```bash
-curl https://authz-engine.onrender.com/health
+cd c:\Apache2462\htdocs\authz-engine
+go build -o authz-server.exe ./cmd/server
+go build -o authz-genkey.exe ./cmd/genkey
+```
+
+> Di Linux/Mac: `go build -o authz-server ./cmd/server`
+
+---
+
+## Langkah 2: Jalankan Server
+
+### Windows (Command Prompt / PowerShell)
+
+```cmd
+set AUTHZ_DB_DRIVER=postgres
+set AUTHZ_DB_CONN=postgresql://postgres:PASSWORD@localhost:5432/authzdb
+set AUTHZ_ADDR=:8080
+set AUTHZ_AUTO_MIGRATE=true
+authz-server.exe
+```
+
+### Windows (Git Bash)
+
+```bash
+export AUTHZ_DB_DRIVER=postgres
+export AUTHZ_DB_CONN='postgresql://postgres:PASSWORD@localhost:5432/authzdb'
+export AUTHZ_ADDR=':8080'
+export AUTHZ_AUTO_MIGRATE='true'
+./authz-server.exe
+```
+
+### Linux / Mac
+
+```bash
+export AUTHZ_DB_DRIVER=postgres
+export AUTHZ_DB_CONN='postgresql://postgres:PASSWORD@localhost:5432/authzdb'
+export AUTHZ_ADDR=':8080'
+export AUTHZ_AUTO_MIGRATE='true'
+./authz-server
+```
+
+### Verifikasi
+
+```bash
+curl http://localhost:8080/health
 ```
 
 Response:
@@ -94,18 +104,14 @@ Response:
 {"status":"ok"}
 ```
 
-> **Catatan**: Render free tier akan **sleep** setelah 15 menit tidak aktif. Saat diakses lagi, akan restart otomatis (butuh ±30 detik pertama kali).
-
 ---
 
-## Langkah 4: Buat API Key (di komputer lokal)
+## Langkah 3: Buat API Key
 
 ```bash
-cd c:\Apache2462\htdocs\authz-engine
-
 go run ./cmd/genkey \
   -driver postgres \
-  -db "postgresql://postgres.XXXXX:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres" \
+  -db "postgresql://postgres:PASSWORD@localhost:5432/authzdb" \
   -name "client1" \
   -rpm 120
 ```
@@ -116,31 +122,29 @@ API key berhasil dibuat. SIMPAN SEKARANG — tidak akan ditampilkan lagi:
 ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-> **PENTING**: Simpan API key — hanya ditampilkan sekali.
-
 ---
 
-## Langkah 5: Uji API
+## Langkah 4: Uji API
 
-### 5.1 Buat role
+### Buat role
 ```bash
-curl -X POST https://authz-engine.onrender.com/roles \
+curl -X POST http://localhost:8080/roles \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"name": "editor", "permissions": ["invoice:read", "invoice:write"]}'
 ```
 
-### 5.2 Assign role
+### Assign role
 ```bash
-curl -X POST https://authz-engine.onrender.com/roles/assign \
+curl -X POST http://localhost:8080/roles/assign \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "role_name": "editor"}'
 ```
 
-### 5.3 Cek izin
+### Cek izin
 ```bash
-curl -X POST https://authz-engine.onrender.com/can \
+curl -X POST http://localhost:8080/can \
   -H "X-API-Key: ak_9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" \
   -H "Content-Type: application/json" \
   -d '{"subject_id": "user:alice", "resource": "invoice", "action": "read"}'
@@ -153,12 +157,56 @@ Response:
 
 ---
 
-## Deploy Ulang Otomatis
+## Akses dari Luar (Opsional)
 
-Render otomatis **redeploy** setiap push ke branch `main` di GitHub.
+Jika ingin diakses dari internet (mis. dari HP atau komputer lain), gunakan tunnel gratis:
 
-```bash
-git push origin main
+### Opsi 1: Cloudflare Tunnel (gratis, tanpa install)
+
+1. Download: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+2. Jalankan:
+   ```bash
+   cloudflared tunnel --url http://localhost:8080
+   ```
+3. Cloudflare memberi URL sementara:
+   ```
+   https://random-name.trycloudflare.com
+   ```
+
+### Opsi 2: ngrok (gratis)
+
+1. Download: https://ngrok.com/download
+2. Daftar & dapatkan token
+3. Jalankan:
+   ```bash
+   ngrok http 8080
+   ```
+4. ngrok memberi URL:
+   ```
+   https://random-name.ngrok-free.app
+   ```
+
+---
+
+## Script Otomatis (Windows)
+
+### `start.bat` — Jalankan server
+
+```bat
+@echo off
+cd /d %~dp0
+set AUTHZ_DB_DRIVER=postgres
+set AUTHZ_DB_CONN=postgresql://postgres:PASSWORD@localhost:5432/authzdb
+set AUTHZ_ADDR=:8080
+set AUTHZ_AUTO_MIGRATE=true
+authz-server.exe
+```
+
+### `stop.bat` — Stop server
+
+```bat
+@echo off
+taskkill /f /im authz-server.exe
 ```
 
 ---
@@ -167,45 +215,46 @@ git push origin main
 
 ### Error: `connection refused` saat migration
 
-- Cek `AUTHZ_DB_CONN` sudah benar di Environment
-- Jika password mengandung `@`/`:`, gunakan URL-encoding (`%40`, `%3A`)
-- Gunakan **URI** (bukan Transaction/Pooler) di Supabase
+- Pastikan PostgreSQL sudah berjalan
+- Cek connection string benar (host, port, password)
+- Jika pakai Supabase, pastikan memilih **URI** (bukan Transaction/Pooler)
 
-### App tidak bisa diakses
+### Port 8080 sudah dipakai
 
-1. Cek tab **Logs** di dashboard Render
-2. Pastikan **Port 10000** sudah benar (Render free tier pakai port 10000)
-3. Pastikan `AUTHZ_ADDR=:10000` di env vars
-4. Cek healthcheck `/health` di browser
+- Ganti port: `set AUTHZ_ADDR=:9090`
+- Akses di `http://localhost:9090`
 
-### Migration gagal di log
+### Firewall Windows memblokir
 
-- Pastikan `AUTHZ_AUTO_MIGRATE=true` sudah di-set
-- Pastikan `AUTHZ_DB_DRIVER=postgres` (bukan sqlserver)
+- Saat pertama kali menjalankan, Windows akan menanyakan akses firewall
+- Klik **Allow access** agar bisa diakses dari jaringan lokal
 
-### App sleep (idle)
+### Ingin auto-start saat Windows boot
 
-- Render free tier sleep setelah 15 menit tidak aktif
-- Saat diakses lagi, restart otomatis (±30 detik)
-- Ini normal untuk free tier
+1. Tekan `Win + R`, ketik `shell:startup`, Enter
+2. Buat shortcut ke `start.bat` di folder startup
 
 ---
 
 ## Catatan Penting
 
-- **Render free tier** — 750 jam/bulan, sleep saat idle
-- **Supabase** gratis 500MB
-- **Database TIDAK dibuat di Render** (mahal) — pakai Supabase
-- **Auto-deploy** dari GitHub
-- **HTTPS otomatis** via `*.onrender.com`
+- **Self-host** = aplikasi berjalan selama PC/laptop menyala
+- **Database lokal** = data tersimpan di PC Anda
+- **Supabase** = data tersimpan di cloud (gratis 500MB)
+- **Tunnel** (ngrok/cloudflared) = akses dari internet tanpa port forwarding manual
+- **Auto-start** = aplikasi jalan otomatis saat Windows boot
 
 ---
 
-## Alternatif Lain
+## File yang Tidak Diperlukan (Sudah Dihapus)
 
-| Kombinasi | Database | App | Catatan |
-|-----------|----------|-----|---------|
-| Supabase + **Render** | [Supabase](https://supabase.com) | [Render](https://render.com) | **Pilihan Anda** — stabil, perlu kartu verifikasi |
-| Supabase + **Zeabur** | [Supabase](https://supabase.com) | [Zeabur](https://zeabur.com) | Region Asia, tanpa kartu |
-| Supabase + **Koyeb** | [Supabase](https://supabase.com) | [Koyeb](https://koyeb.com) | $5/bulan refresh |
-| Supabase + **Fly.io** | [Supabase](https://supabase.com) | [Fly.io](https://fly.io) | Perlu kartu verifikasi |
+File konfigurasi cloud yang sudah tidak diperlukan untuk self-hosting:
+
+| File | Keterangan |
+|------|------------|
+| `render.yaml` | Konfigurasi Render (cloud) — dihapus |
+| `zeabur.json` | Konfigurasi Zeabur (cloud) — dihapus |
+| `koyeb.yaml` | Konfigurasi Koyeb (cloud) — dihapus |
+| `railway.toml` | Konfigurasi Railway (cloud) — dihapus |
+| `.replit` | Konfigurasi Replit (cloud) — dihapus |
+| `replit.nix` | Konfigurasi Replit (cloud) — dihapus |
