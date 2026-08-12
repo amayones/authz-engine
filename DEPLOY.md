@@ -137,34 +137,150 @@ Response:
 
 ---
 
-## Akses dari Luar (Opsional)
+## Cara Membuat Aplikasi Dapat Diakses Publik
 
-Jika ingin diakses dari internet (mis. dari HP atau komputer lain), gunakan tunnel gratis:
+Aplikasi yang berjalan di `localhost:8080` hanya bisa diakses dari PC Anda. Untuk membuatnya **dapat diakses dari internet** (HP, komputer lain, atau client di luar), gunakan salah satu metode di bawah.
 
-### Opsi 1: Cloudflare Tunnel (gratis, tanpa install)
+### Metode 1: Cloudflare Tunnel (PALING MUDAH — gratis, tanpa daftar)
 
-1. Download: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
-2. Jalankan:
-   ```bash
-   cloudflared tunnel --url http://localhost:8080
-   ```
-3. Cloudflare memberi URL sementara:
-   ```
-   https://random-name.trycloudflare.com
-   ```
+**Langkah 1: Download cloudflared**
 
-### Opsi 2: ngrok (gratis)
+- Windows: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+- Pilih file `cloudflared-windows-amd64.exe`
+- Rename menjadi `cloudflared.exe` dan letakkan di folder proyek
+
+**Langkah 2: Jalankan tunnel**
+
+```bash
+cloudflared tunnel --url http://localhost:8080
+```
+
+**Langkah 3: Dapatkan URL publik**
+
+Cloudflare akan menampilkan URL seperti:
+```
+https://random-name.trycloudflare.com
+```
+
+**Langkah 4: Uji dari luar**
+
+```bash
+curl https://random-name.trycloudflare.com/health
+```
+
+Response:
+```json
+{"status":"ok"}
+```
+
+> **Catatan**: URL `trycloudflare.com` bersifat sementara — berubah setiap kali tunnel dijalankan ulang.
+
+---
+
+### Metode 2: ngrok (gratis, URL stabil)
+
+**Langkah 1: Download & daftar**
 
 1. Download: https://ngrok.com/download
-2. Daftar & dapatkan token
-3. Jalankan:
-   ```bash
-   ngrok http 8080
-   ```
-4. ngrok memberi URL:
-   ```
-   https://random-name.ngrok-free.app
-   ```
+2. Daftar di https://ngrok.com (gratis, email)
+3. Dapatkan token di dashboard
+
+**Langkah 2: Setup token**
+
+```bash
+ngrok config add-authtoken YOUR_TOKEN
+```
+
+**Langkah 3: Jalankan tunnel**
+
+```bash
+ngrok http 8080
+```
+
+**Langkah 4: Dapatkan URL publik**
+
+ngrok menampilkan URL seperti:
+```
+https://random-name.ngrok-free.app
+```
+
+**Langkah 5: Uji dari luar**
+
+```bash
+curl https://random-name.ngrok-free.app/health
+```
+
+Response:
+```json
+{"status":"ok"}
+```
+
+> **Catatan**: URL `ngrok-free.app` juga berubah setiap restart, tapi bisa dibuat statis dengan upgrade (berbayar).
+
+---
+
+### Metode 3: Port Forwarding di Router (URL tetap, tanpa tunnel)
+
+Jika Anda punya **IP publik statis** dari ISP, bisa port forwarding:
+
+1. Buka router admin (biasanya `192.168.1.1` atau `192.168.0.1`)
+2. Cari menu **Port Forwarding** / **Virtual Server**
+3. Tambahkan rule:
+   - **External Port**: `8080`
+   - **Internal IP**: IP lokal PC Anda (mis. `192.168.1.100`)
+   - **Internal Port**: `8080`
+   - **Protocol**: TCP
+4. Simpan & restart router
+5. Akses dari luar: `http://IP_PUBLIC_ANDA:8080/health`
+
+> **Catatan**: Butuh IP publik statis. Jika IP berubah, gunakan **DDNS** (mis. no-ip.com).
+
+---
+
+### Script Otomatis: `tunnel.bat`
+
+Sudah disediakan script `tunnel.bat` di repo — double-click untuk memilih metode tunnel:
+
+```bat
+@echo off
+title authz-engine - Public Tunnel
+cd /d %~dp0
+
+echo Pilih metode tunnel:
+echo   1. Cloudflare Tunnel (gratis, tanpa daftar)
+echo   2. ngrok (gratis, perlu daftar)
+set /p choice="Pilih (1/2): "
+
+if "%choice%"=="1" (
+    cloudflared tunnel --url http://localhost:8080
+) else if "%choice%"=="2" (
+    ngrok http 8080
+) else (
+    echo Pilihan tidak valid.
+    pause
+)
+```
+
+---
+
+### Alur Lengkap (Server + Tunnel)
+
+1. Jalankan server: `start.bat`
+2. Jalankan tunnel: `tunnel.bat` (pilih 1 atau 2)
+3. Dapatkan URL publik dari output tunnel
+4. Gunakan URL publik untuk akses dari luar
+
+```
+Client (HP/komputer lain)
+  ↓ HTTPS
+URL publik (trycloudflare.com / ngrok-free.app)
+  ↓
+Tunnel (cloudflared / ngrok)
+  ↓
+localhost:8080 (authz-engine)
+  ↓
+SQL Server (lokal)
+```
 
 ---
 
