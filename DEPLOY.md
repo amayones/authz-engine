@@ -215,7 +215,7 @@ Response:
 {"status":"ok"}
 ```
 
-> **Catatan**: URL `ngrok-free.app` juga berubah setiap restart, tapi bisa dibuat statis dengan upgrade (berbayar).
+> **Catatan**: URL `ngrok-free.app` **berubah setiap kali tunnel di-restart** di free tier. Selama tunnel berjalan terus, URL tetap sama. Untuk URL permanen, lihat bagian "URL Statis" di bawah.
 
 ---
 
@@ -234,6 +234,52 @@ Jika Anda punya **IP publik statis** dari ISP, bisa port forwarding:
 5. Akses dari luar: `http://IP_PUBLIC_ANDA:8080/health`
 
 > **Catatan**: Butuh IP publik statis. Jika IP berubah, gunakan **DDNS** (mis. no-ip.com).
+
+---
+
+### URL Statis (Permanen) — Cloudflare Tunnel + Domain Gratis
+
+Jika ingin URL yang **tidak berubah** (permanen) secara gratis, gunakan kombinasi:
+
+1. **Domain gratis** dari Freenom (`.tk`, `.ml`, `.ga`, `.cf`, `.gq`)
+2. **Cloudflare** (free plan) untuk DNS
+3. **cloudflared** dengan config file untuk tunnel permanen
+
+**Langkah 1: Dapatkan domain gratis**
+
+1. Buka https://www.freenom.com
+2. Daftar (gratis) → cari domain (mis. `authz-engine.tk`)
+3. Pilih **12 months FREE** → checkout
+
+**Langkah 2: Tambahkan domain ke Cloudflare**
+
+1. Buka https://dash.cloudflare.com → **Add a site**
+2. Masukkan domain Anda (mis. `authz-engine.tk`)
+3. Pilih **Free plan**
+4. Cloudflare memberi 2 nameserver (mis. `xxx.ns.cloudflare.com`)
+5. Di Freenom, ganti nameserver domain ke nameserver Cloudflare
+6. Tunggu ±5 menit sampai aktif
+
+**Langkah 3: Buat tunnel permanen**
+
+1. Login Cloudflare → **Zero Trust** → **Networks** → **Tunnels**
+2. Klik **Create a tunnel** → pilih **Cloudflared** → beri nama (mis. `authz`)
+3. Ikuti instruksi install `cloudflared` di PC Anda
+4. Di bagian **Public Hostname**, tambahkan:
+   - **Subdomain**: `api`
+   - **Domain**: `authz-engine.tk`
+   - **Service**: `http://localhost:8080`
+5. Simpan
+
+**Langkah 4: Akses permanen**
+
+```
+https://api.authz-engine.tk/health
+```
+
+URL ini **tidak akan berubah** — selama tunnel berjalan, domain selalu mengarah ke server Anda.
+
+> **Catatan**: Tunnel harus berjalan agar domain aktif. Bisa dijadikan service Windows agar auto-start.
 
 ---
 
