@@ -1,1 +1,11 @@
-run = "go run ./cmd/server"
+run = "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"
+
+[nix]
+channel = "stable-24_11"
+
+[deployment]
+run = ["sh", "-c", "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"]
+
+[languages]
+[languages.go]
+pattern = "**/*.go"

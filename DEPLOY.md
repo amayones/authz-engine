@@ -124,15 +124,28 @@ git push origin main
 Jika Replit tidak otomatis menjalankan server, buat file `.replit` di root proyek:
 
 ```
-run = "go run ./cmd/server"
+run = "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"
+
+[nix]
+channel = "stable-24_11"
+
+[deployment]
+run = ["sh", "-c", "go build -o /tmp/authz-server ./cmd/server && /tmp/authz-server"]
+
+[languages]
+[languages.go]
+pattern = "**/*.go"
 ```
+
+> **Catatan**: Menggunakan `go build` (compile sekali) lalu jalankan binary jauh lebih cepat daripada `go run` yang compile ulang setiap kali — penting untuk tier gratis Replit.
 
 Dan file `replit.nix`:
 
 ```nix
 { pkgs }: {
   deps = [
-    pkgs.go
+    pkgs.go_1_26
+    pkgs.git
   ];
 }
 ```
@@ -242,6 +255,48 @@ Replit gratis akan mematikan app setelah tidak digunakan (idle). Saat diakses la
 ### Replit tidak menjalankan server Go
 
 Pastikan file `.replit` dan `replit.nix` ada (lihat Langkah 3.5), atau gunakan tombol **Run** manual.
+
+### Error: `Security scan skipped: connection lost`
+
+Ini **bukan error dari kode Anda** — ini masalah infrastruktur Replit. Build berhenti karena koneksi Replit ke server build terputus. Penyebab umum:
+
+1. **Dependensi terlalu besar** — `go.mod` sebelumnya menarik ratusan package (MySQL, SQLite, MongoDB, dll.) karena directive `tool github.com/golang-migrate/migrate/v4/cmd/migrate`. Ini membuat build sangat lambat dan timeout.
+   - **Solusi**: Sudah diperbaiki — directive `tool` dihapus dan `go mod tidy` dijalankan. `go.mod` sekarang hanya 38 baris (sebelumnya 197 baris).
+
+2. **Versi Go tidak tersedia di Replit** — `go 1.26.5` di `go.mod` mungkin tidak tersedia persis di Replit.
+   - **Solusi**: `replit.nix` sekarang menggunakan `pkgs.go_1_26` yang lebih fleksibel.
+
+3. **Koneksi internet Replit tidak stabil** — kadang build gagal karena jaringan.
+   - **Solusi**: Klik **Run** lagi. Jika masih gagal, coba **Stop** lalu **Run** ulang, atau refresh halaman.
+
+4. **Cache build rusak** — Replit menyimpan cache build yang kadang korup.
+   - **Solusi**: Di Replit, buka **Shell** dan jalankan:
+     ```bash
+     rm -rf ~/.cache/go-build
+     go clean -cache
+     ```
+     Lalu klik **Run** lagi.
+
+5. **Replit sedang down** — cek status di https://status.replit.com
+
+**Langkah yang harus dilakukan setelah perbaikan ini:**
+
+1. Push perubahan ke GitHub:
+   ```bash
+   git add .
+   git commit -m "perbaiki konfigurasi Replit: kurangi dependensi, tambah nix channel"
+   git push origin main
+   ```
+
+2. Di Replit, buka **Shell** dan jalankan:
+   ```bash
+   rm -rf ~/.cache/go-build
+   go clean -cache
+   ```
+
+3. Klik **Run** lagi.
+
+4. Jika masih gagal, buat **Repl baru** (Import from GitHub) dengan repo yang sama — ini membersihkan semua cache lama.
 
 ---
 
